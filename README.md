@@ -51,5 +51,5 @@ The + and - pins can also be connected to the Raspberry Pi or to an independent 
 Run the motor demo as follows:
 
 ``` shell
-sudo /opt/apache-maven-3.3.3/bin/mvn exec:java -Dexec.mainClass="de.joeakeem.m28BYJ48.Example"
+sudo /opt/apache-maven-3.3.3/bin/mvn exec:java -Dexec.mainClass="de.joeakeem.m28BYJ48.MonitorStove"
 ```

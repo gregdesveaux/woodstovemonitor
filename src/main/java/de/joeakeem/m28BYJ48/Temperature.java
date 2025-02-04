@@ -5,8 +5,10 @@ import com.pi4j.context.Context;
 import com.pi4j.io.i2c.I2C;
 import com.pi4j.io.i2c.I2CConfig;
 
-public class temperature {
-    public static void main(String[] args) {
+public class Temperature {
+
+    I2C i2c;
+    public Temperature() {
         // Create a Pi4J context
         Context pi4j = Pi4J.newAutoContext();
 
@@ -20,7 +22,7 @@ public class temperature {
                     .build();
 
             // Create an I2C instance
-            I2C i2c = pi4j.create(i2cConfig);
+            i2c = pi4j.create(i2cConfig);
 
             // Read ambient temperature (RAM address 0x06)
             int ambientTempRaw = readTemperatureRegister(i2c, 0x06);
@@ -38,6 +40,16 @@ public class temperature {
             // Shutdown Pi4J context
             pi4j.shutdown();
         }
+    }
+    double getTemp(){
+        int objectTempRaw = 0;
+        try {
+            objectTempRaw = readTemperatureRegister(i2c, 0x07);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        double objectTemp = convertToCelsius(objectTempRaw);
+        return objectTemp;
     }
 
     // Helper method to read and swap bytes

@@ -104,25 +104,5 @@ public class StepperMotor28BYJ48 {
 		}
 	}
 
-	public static void main(String[] args) {
-		// Initialize Pi4J context
-		var console = new Console();
-		var pi4j = Pi4J.newAutoContext();
 
-		try {
-			// Define motor GPIO pins
-			int[] pins = {14, 15, 18, 23}; // Update to your pin numbers
-			int stepDuration = 10; // 10ms between steps
-
-			// Create motor instance
-			var motor = new StepperMotor28BYJ48(pi4j, pins, stepDuration, SteppingMethod.WAVE_DRIVE);
-
-			// Perform demo
-			int rotations=Integer.parseInt(args[0]);
-			motor.performDemo(rotations);
-
-		} finally {
-			pi4j.shutdown();
-		}
-	}
 }
