@@ -1,11 +1,8 @@
 package de.joeakeem.m28BYJ48;
 
-import com.pi4j.Pi4J;
 import com.pi4j.context.Context;
 import com.pi4j.io.gpio.digital.DigitalOutput;
-import com.pi4j.io.gpio.digital.DigitalOutputConfigBuilder;
 import com.pi4j.io.gpio.digital.DigitalOutputProvider;
-import com.pi4j.util.Console;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,10 +49,10 @@ public class StepperMotor28BYJ48 {
 		}
 	}
 
-	public void performDemo(int rotations) {
+    public void moveDamper(int rotations, int direction) {
 		LOG.info("Full rotation clockwise in wave drive method...");
 		setSteppingMethod(SteppingMethod.WAVE_DRIVE);
-		fullRotation(rotations);
+        fullRotation(rotations, direction);
 		shutdown();
 		LOG.info("Done.");
 	}
@@ -64,14 +61,14 @@ public class StepperMotor28BYJ48 {
 		this.steppingMethod = method;
 	}
 
-	public void fullRotation(int rotations) {
-		step(rotations * 512);
+    public void fullRotation(int rotations, int direction) {
+        step(rotations * 512, direction);
 	}
 
-	private void step(int steps) {
+    private void step(int steps, int direction) {
 		for (int currentStep = 0; currentStep < Math.abs(steps); currentStep++) {
 			int sequenceIndex = currentStep % 4;
-			writeSequence(sequenceIndex);
+            writeSequence(sequenceIndex, direction);
 
 			// Pause between steps
 			try {
@@ -82,18 +79,29 @@ public class StepperMotor28BYJ48 {
 		}
 	}
 
-	private void writeSequence(int sequenceIndex) {
+    private void writeSequence(int sequenceIndex, int direction) {
 		// Define sequences for WAVE_DRIVE
-		boolean[][] waveDriveSequences = {
+        boolean[][] forwardWaveDriveSequences = {
 				{true, false, false, false},
 				{false, true, false, false},
 				{false, false, true, false},
 				{false, false, false, true}
 		};
 
+        boolean[][] backwardWaveDriveSequences = {
+                {false, false, false, true},
+                {false, false, true, false},
+                {false, true, false, false},
+                {true, false, false, false}
+        };
+
 		// Apply sequence to pins
 		for (int i = 0; i < motorPins.length; i++) {
-			motorPins[i].state(waveDriveSequences[sequenceIndex][i] ? HIGH : LOW);
+            if (direction == 1) {
+                motorPins[i].state(forwardWaveDriveSequences[sequenceIndex][i] ? HIGH : LOW);
+            } else {
+                motorPins[i].state(backwardWaveDriveSequences[sequenceIndex][i] ? HIGH : LOW);
+            }
 		}
 	}
 
