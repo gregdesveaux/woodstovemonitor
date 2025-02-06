@@ -62,7 +62,7 @@ public class StepperMotor28BYJ48 {
 	}
 
     public void fullRotation(int rotations, int direction) {
-        step(rotations * 512, direction);
+        step(rotations , direction);
 	}
 
     private void step(int steps, int direction) {
