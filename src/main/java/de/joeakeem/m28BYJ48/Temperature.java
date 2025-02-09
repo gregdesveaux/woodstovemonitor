@@ -24,31 +24,23 @@ public class Temperature {
             // Create an I2C instance
             i2c = pi4j.create(i2cConfig);
 
-            // Read ambient temperature (RAM address 0x06)
-            int ambientTempRaw = readTemperatureRegister(i2c, 0x06);
-            double ambientTemp = convertToCelsius(ambientTempRaw);
-            System.out.println("Ambient Temperature: " + ambientTemp + " °C");
 
-            // Read object temperature (RAM address 0x07)
-            int objectTempRaw = readTemperatureRegister(i2c, 0x07);
-            double objectTemp = convertToCelsius(objectTempRaw);
-            System.out.println("Object Temperature: " + objectTemp + " °C");
+
 
         } catch (Exception e) {
             e.printStackTrace();
-        } finally {
-            // Shutdown Pi4J context
-            pi4j.shutdown();
         }
     }
-    double getTemp(){
+    int getTemp(){
         int objectTempRaw = 0;
         try {
             objectTempRaw = readTemperatureRegister(i2c, 0x07);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-        double objectTemp = convertToCelsius(objectTempRaw);
+            int objectTemp = (int)Math.round(convertToCelsius(objectTempRaw));
+
+
         return objectTemp;
     }
 
