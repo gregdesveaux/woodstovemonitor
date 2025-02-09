@@ -55,7 +55,7 @@ public class MonitorStove {
         return damperPosition;
     }
     void resetBurn(){
-        boolean inBurnLoop = false;
+        inBurnLoop = false;
         System.out.println("Moving damper to open");
         stepperMotor.moveDamper(1000-damperPosition, 0);
         damperPosition = 1000;
