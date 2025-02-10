@@ -52,6 +52,7 @@ public class WebInterface {
                     "<form action='/increment' method='post'>" +
                     "<button type='submit'>refresh</button>" +
                     "</form>" +
+                    "<p id='counter'>*****************************************</p>" +
                     "<form action='/reset' method='post'>" +
                     "<button type='submit'>Reset burn</button>" +
                     "</form>" +
