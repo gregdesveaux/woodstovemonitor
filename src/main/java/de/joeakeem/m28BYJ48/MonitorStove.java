@@ -2,14 +2,13 @@ package de.joeakeem.m28BYJ48;
 
 import com.pi4j.Pi4J;
 import com.pi4j.context.Context;
-import de.joeakeem.m28BYJ48.StepperMotor28BYJ48.SteppingMethod;
 
 /**
  * Hello world!
  */
 public class MonitorStove {
     Temperature temperature;
-    int damperPosition = 1000;
+    int damperPosition = 3000;
     StepperMotor28BYJ48 stepperMotor = null;
     int temp=0;
     boolean inBurnLoop = false;
@@ -26,10 +25,10 @@ public class MonitorStove {
             stepperMotor.moveDamper(steps, 1);
         }));
         System.setProperty("spark.logging.quiet", "true");
-        int[] pins = {14, 15, 18, 23};
+
         Context pi4j = Pi4J.newAutoContext();
         stepperMotor = new
-                StepperMotor28BYJ48(pi4j, pins, 10, SteppingMethod.FULL_STEP);
+                StepperMotor28BYJ48(pi4j);
         //stepperMotor.performDemo(rotations);
         temperature = new Temperature();
         new WebInterface(this);
@@ -58,8 +57,8 @@ public class MonitorStove {
         System.exit(0);
         inBurnLoop = false;
         System.out.println("Moving damper to open");
-        stepperMotor.moveDamper(1000-damperPosition, 0);
-        damperPosition = 1000;
+        stepperMotor.moveDamper(3000-damperPosition, 0);
+        damperPosition = 3000;
     }
     void hotThread() {
         new Thread() {
@@ -70,8 +69,8 @@ public class MonitorStove {
                         System.out.println("Temp: " + temp);
                         System.out.println("Damper: " + damperPosition);
                         System.out.println("inBurnloop: "+inBurnLoop);
-                      if (temp > 220 && inBurnLoop && damperPosition > 100) {
-                            int steps = 100;
+                      if (temp > 230 && inBurnLoop && damperPosition > 300) {
+                            int steps = 300;
                             int direction = 1;
 
                             stepperMotor.moveDamper(steps, direction);
@@ -101,14 +100,14 @@ public class MonitorStove {
                     temp = temperature.getTemp();
                     System.out.println("Temp: " + temp);
                     System.out.println("Damper: " + damperPosition);
-                 if (temp < 195 && inBurnLoop && damperPosition < 1000) {
-                        int steps = 100;
+                 if (temp < 195 && inBurnLoop && damperPosition < 3000) {
+                        int steps = 300;
                         int direction = 0;
 
                         stepperMotor.moveDamper(steps, direction);
                         damperPosition = damperPosition + steps;
                         System.out.println("moving damper to: " + damperPosition);
-                    } else if (temp < 150 && inBurnLoop && damperPosition > 500) {
+                    } else if (temp < 150 && inBurnLoop && damperPosition > 1500) {
                         int steps = damperPosition;
                         int direction = 1;
 
@@ -134,8 +133,8 @@ public class MonitorStove {
                     int temp = temperature.getTemp();
                     System.out.println("Temp: " + temp);
                     System.out.println("Damper: " + damperPosition);
-                    if (temp > 220 && !inBurnLoop) {
-                        int steps = 700;
+                    if (temp > 230 && !inBurnLoop) {
+                        int steps = 2100;
                         int direction = 1;
                         if (steps < 0) {
                             steps = 0 - steps;
@@ -144,10 +143,10 @@ public class MonitorStove {
 
                         stepperMotor.moveDamper(steps, direction);
                         inBurnLoop = true;
-                        damperPosition = 300;
+                        damperPosition = 900;
                         System.out.println("moving damper to: " + damperPosition);
-                    } else if (temp > 230 && damperPosition > 100) {
-                        int steps = 100;
+                    } else if (temp > 250 && damperPosition > 300) {
+                        int steps = 300;
                         int direction = 1;
 
                         stepperMotor.moveDamper(steps, direction);

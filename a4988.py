@@ -16,7 +16,7 @@ GPIO.output(ENABLE_PIN, GPIO.LOW)
 print("Driver enabled.")
 
 # Step the motor 200 steps (adjust delay as needed)
-for i in range(3000):
+for i in range(300):
     GPIO.output(STEP_PIN, GPIO.HIGH)
     time.sleep(0.005)
     GPIO.output(STEP_PIN, GPIO.LOW)
