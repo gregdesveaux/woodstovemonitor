@@ -55,6 +55,7 @@ public class MonitorStove {
         return damperPosition;
     }
     void resetBurn(){
+        System.exit(0);
         inBurnLoop = false;
         System.out.println("Moving damper to open");
         stepperMotor.moveDamper(1000-damperPosition, 0);
@@ -68,19 +69,8 @@ public class MonitorStove {
                         temp = temperature.getTemp();
                         System.out.println("Temp: " + temp);
                         System.out.println("Damper: " + damperPosition);
-                        if (temp > 190 && !inBurnLoop) {
-                            int steps = 800;
-                            int direction = 1;
-                            if (steps < 0) {
-                                steps = 0 - steps;
-                                direction = 0;
-                            }
-
-                            stepperMotor.moveDamper(steps, direction);
-                            inBurnLoop = true;
-                            damperPosition = 200;
-                            System.out.println("moving damper to: " + damperPosition);
-                        } else if (temp > 210 && inBurnLoop && damperPosition > 100) {
+                        System.out.println("inBurnloop: "+inBurnLoop);
+                      if (temp > 220 && inBurnLoop && damperPosition > 100) {
                             int steps = 100;
                             int direction = 1;
 
@@ -111,7 +101,7 @@ public class MonitorStove {
                     temp = temperature.getTemp();
                     System.out.println("Temp: " + temp);
                     System.out.println("Damper: " + damperPosition);
-                 if (temp < 190 && inBurnLoop && damperPosition < 1000) {
+                 if (temp < 195 && inBurnLoop && damperPosition < 1000) {
                         int steps = 100;
                         int direction = 0;
 
@@ -144,7 +134,19 @@ public class MonitorStove {
                     int temp = temperature.getTemp();
                     System.out.println("Temp: " + temp);
                     System.out.println("Damper: " + damperPosition);
-                    if (temp > 220 && damperPosition > 100) {
+                    if (temp > 220 && !inBurnLoop) {
+                        int steps = 700;
+                        int direction = 1;
+                        if (steps < 0) {
+                            steps = 0 - steps;
+                            direction = 0;
+                        }
+
+                        stepperMotor.moveDamper(steps, direction);
+                        inBurnLoop = true;
+                        damperPosition = 300;
+                        System.out.println("moving damper to: " + damperPosition);
+                    } else if (temp > 230 && damperPosition > 100) {
                         int steps = 100;
                         int direction = 1;
 
