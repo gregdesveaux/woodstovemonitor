@@ -3,6 +3,13 @@ package de.joeakeem.m28BYJ48;
 import com.pi4j.Pi4J;
 import com.pi4j.context.Context;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Date;
+
 /**
  * Hello world!
  */
@@ -12,6 +19,7 @@ public class MonitorStove {
     StepperMotor28BYJ48 stepperMotor = null;
     int temp=0;
     boolean inBurnLoop = false;
+    FileOutputStream tempFile;
     public static void main(String[] args) {
 
         new MonitorStove();
@@ -25,7 +33,12 @@ public class MonitorStove {
             stepperMotor.moveDamper(steps, 1);
         }));
         System.setProperty("spark.logging.quiet", "true");
-
+        File f=new File("timeVStemp.csv");
+        try {
+            tempFile=new FileOutputStream(f,true);
+        } catch (FileNotFoundException e) {
+            throw new RuntimeException(e);
+        }
         Context pi4j = Pi4J.newAutoContext();
         stepperMotor = new
                 StepperMotor28BYJ48(pi4j);
@@ -118,7 +131,7 @@ public class MonitorStove {
                     temp = temperature.getTemp();
                     System.out.println("Temp: " + temp);
                     System.out.println("Damper: " + damperPosition);
-                 if (temp < 195 && inBurnLoop && damperPosition < 3000) {
+                 if (temp < 200 && inBurnLoop && damperPosition < 3000) {
                         int steps = 300;
                         int direction = 0;
 
@@ -135,7 +148,7 @@ public class MonitorStove {
                         System.out.println("Fire is out, moving damper to: " + damperPosition);
                     }
                     try {
-                        Thread.sleep(1000 * 60 * 20);
+                        Thread.sleep(1000 * 60 * 10);
                     } catch (InterruptedException e) {
                         throw new RuntimeException(e);
                     }
@@ -151,6 +164,13 @@ public class MonitorStove {
                     int temp = temperature.getTemp();
                     System.out.println("Temp: " + temp);
                     System.out.println("Damper: " + damperPosition);
+                    Date date=new Date();
+                    String timeTemp=date+","+temp+","+damperPosition+"\n";
+                    try {
+                        tempFile.write(timeTemp.getBytes(StandardCharsets.UTF_8));
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                     if (temp > 230 && !inBurnLoop) {
                         int steps = 2100;
                         int direction = 1;
