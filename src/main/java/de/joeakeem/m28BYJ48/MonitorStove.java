@@ -60,6 +60,24 @@ public class MonitorStove {
         stepperMotor.moveDamper(3000-damperPosition, 0);
         damperPosition = 3000;
     }
+
+    void openDamper() {
+        int steps = 300;
+        int direction = 0;
+        if (damperPosition <2700) {
+            stepperMotor.moveDamper(steps, direction);
+            damperPosition = damperPosition + steps;
+            System.out.println("moving damper to: " + damperPosition);
+        }
+    }
+    void closeDamper() {
+        int steps = damperPosition;
+        System.out.println("closing damper");
+        stepperMotor.moveDamper(steps, 1);
+        System.out.println("damper closed");
+        damperPosition=0;
+    }
+
     void hotThread() {
         new Thread() {
             public void run() {

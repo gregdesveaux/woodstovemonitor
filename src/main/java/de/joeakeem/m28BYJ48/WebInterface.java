@@ -56,6 +56,14 @@ public class WebInterface {
                     "<form action='/reset' method='post'>" +
                     "<button type='submit'>Reset burn</button>" +
                     "</form>" +
+                    "<p id='counter'>*****************************************</p>" +
+                    "<form action='/open' method='post'>" +
+                    "<button type='submit'>Open Damper a bit</button>" +
+                    "</form>" +
+                    "<p id='counter'>*****************************************</p>" +
+                    "<form action='/close' method='post'>" +
+                    "<button type='submit'>Close Damper</button>" +
+                    "</form>" +
                     "</body>" +
                     "</html>";
             res.type("text/html");
@@ -71,6 +79,16 @@ public class WebInterface {
 
         post("/reset", (req, res) -> {
             parent.resetBurn();
+            res.redirect("/");
+            return null;
+        });
+        post("/open", (req, res) -> {
+            parent.openDamper();
+            res.redirect("/");
+            return null;
+        });
+        post("/close", (req, res) -> {
+            parent.closeDamper();
             res.redirect("/");
             return null;
         });
