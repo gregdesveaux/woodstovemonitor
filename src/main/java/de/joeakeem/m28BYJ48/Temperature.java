@@ -35,6 +35,7 @@ public class Temperature {
         int objectTempRaw = 0;
         try {
             objectTempRaw = readTemperatureRegister(i2c, 0x07);
+            System.out.println("Sensor temp: "+(int)Math.round(convertToCelsius(readTemperatureRegister(i2c, 0x06))));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

@@ -28,12 +28,13 @@ public class MonitorStove {
 
     public MonitorStove() {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            System.out.println("Shutdown Hook is running!");
+            System.out.println("Closing damper");
             int steps = damperPosition;
             stepperMotor.moveDamper(steps, 1);
+            System.out.println("Damper Closed");
         }));
         System.setProperty("spark.logging.quiet", "true");
-        File f=new File("timeVStemp.csv");
+        File f=new File("/home/gdesveau/timeVStemp.csv");
         try {
             tempFile=new FileOutputStream(f,true);
         } catch (FileNotFoundException e) {
