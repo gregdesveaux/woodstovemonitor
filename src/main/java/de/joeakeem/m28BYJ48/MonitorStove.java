@@ -23,8 +23,9 @@ public class MonitorStove {
     int temp = 0;
     boolean inBurnLoop = false;
     FileOutputStream tempFile;
-    int highTemp=230;
-
+    int highTemp = 230;
+    Memo memo;
+    boolean fanOn = false;
 
     public static void main(String[] args) {
 
@@ -39,6 +40,7 @@ public class MonitorStove {
             stepperMotor.moveDamper(steps, 1);
             System.out.println("Damper Closed");
         }));
+        memo = new Memo();
         System.setProperty("spark.logging.quiet", "true");
         File f = new File("/home/gdesveau/timeVStemp.csv");
         try {
@@ -130,7 +132,7 @@ public class MonitorStove {
                     System.out.println("Temp: " + temp);
                     System.out.println("Damper: " + damperPosition);
                     System.out.println("inBurnloop: " + inBurnLoop);
-                    if (temp > (highTemp+20) && inBurnLoop && damperPosition > 300) {
+                    if (temp > (highTemp + 20) && inBurnLoop && damperPosition > 300) {
                         int steps = 300;
                         int direction = 1;
 
@@ -138,7 +140,13 @@ public class MonitorStove {
                         damperPosition = damperPosition - steps;
                         System.out.println("moving damper to: " + damperPosition);
                     }
-
+                    if (temp > 50 && !fanOn) {
+                        memo.setOn();
+                        fanOn = true;
+                    } else if (temp < 50 && fanOn) {
+                        memo.setOff();
+                        fanOn = true;
+                    }
                     try {
                         Thread.sleep(1000 * 60 * 5);
                     } catch (InterruptedException e) {
@@ -162,21 +170,21 @@ public class MonitorStove {
                     temp = temperature.getTemp();
                     System.out.println("Temp: " + temp);
                     System.out.println("Damper: " + damperPosition);
-                    if (temp < (highTemp-20) && inBurnLoop && damperPosition < 600) {
+                    if (temp < (highTemp - 20) && inBurnLoop && damperPosition < 600) {
                         int steps = 300;
                         int direction = 0;
 
                         stepperMotor.moveDamper(steps, direction);
                         damperPosition = damperPosition + steps;
                         System.out.println("moving damper to: " + damperPosition);
-                    } else if (temp < (highTemp-25) && inBurnLoop && damperPosition < 300) {
+                    } else if (temp < (highTemp - 25) && inBurnLoop && damperPosition < 300) {
                         int steps = 300;
                         int direction = 0;
 
                         stepperMotor.moveDamper(steps, direction);
                         damperPosition = damperPosition + steps;
                         System.out.println("moving damper to: " + damperPosition);
-                    } else if (temp < (highTemp-40) && inBurnLoop && damperPosition < 1200) {
+                    } else if (temp < (highTemp - 40) && inBurnLoop && damperPosition < 1200) {
                         int steps = 300;
                         int direction = 0;
 
@@ -230,7 +238,7 @@ public class MonitorStove {
                         inBurnLoop = true;
                         damperPosition = 600;
                         System.out.println("temp is above 250 and rise is greater than 6. starting burn loop and moving damper to: " + damperPosition);
-                    } else if (temp > (highTemp+15) && !inBurnLoop) {
+                    } else if (temp > (highTemp + 15) && !inBurnLoop) {
                         int steps = 2400;
                         int direction = 1;
                         if (steps < 0) {
