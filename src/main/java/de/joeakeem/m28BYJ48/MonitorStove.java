@@ -140,12 +140,13 @@ public class MonitorStove {
                         damperPosition = damperPosition - steps;
                         System.out.println("moving damper to: " + damperPosition);
                     }
-                    if (temp > 50 && !fanOn) {
+                    int roomTemp=temperature.getRoomTemp();
+                    if (roomTemp > 50 && !fanOn) {
                         memo.setOn();
                         fanOn = true;
-                    } else if (temp < 50 && fanOn) {
+                    } else if (roomTemp < 50 && roomTemp>0 && fanOn) {
                         memo.setOff();
-                        fanOn = true;
+                        fanOn = false;
                     }
                     try {
                         Thread.sleep(1000 * 60 * 5);

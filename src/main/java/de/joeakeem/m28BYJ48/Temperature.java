@@ -44,6 +44,18 @@ public class Temperature {
 
         return objectTemp;
     }
+    int getRoomTemp(){
+        int objectTempRaw = 0;
+        try {
+            objectTempRaw = readTemperatureRegister(i2c, 0x06);
+              } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        int objectTemp = (int)Math.round(convertToCelsius(objectTempRaw));
+
+
+        return objectTemp;
+    }
 
     // Helper method to read and swap bytes
     private static int readTemperatureRegister(I2C i2c, int register) throws Exception {

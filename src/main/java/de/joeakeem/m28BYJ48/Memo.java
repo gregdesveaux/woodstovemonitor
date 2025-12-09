@@ -17,7 +17,7 @@ public class Memo {
                 "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">\n" +
                 "  <s:Body>\n" +
                 "    <u:SetBinaryState xmlns:u=\"urn:Belkin:service:basicevent:1\">\n" +
-                "      <BinaryState>0</BinaryState>\n" +
+                "      <BinaryState>1</BinaryState>\n" +
                 "    </u:SetBinaryState>\n" +
                 "  </s:Body>\n" +
                 "</s:Envelope>";
