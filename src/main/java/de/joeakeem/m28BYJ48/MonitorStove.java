@@ -24,6 +24,10 @@ public class MonitorStove {
     private static final int DIRECTION_CLOSE = 1;
     private static final int DIRECTION_OPEN = 0;
     private static final int START_HIGH_TEMP = 230;
+    private static final Path DAMPER_POSITION_FILE = Path.of(
+            System.getProperty("user.home"),
+            "damper_position.txt"
+    );
 
     private final Temperature temperature;
     private final StepperMotor28BYJ48 stepperMotor;
