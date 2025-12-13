@@ -9,6 +9,7 @@ public class WebInterface {
     private static final Logger logger = LoggerFactory.getLogger(WebInterface.class);
     private int temperature = 0;
     private int damper = 0;
+    private int startHighTemp = 0;
     private final MonitorStove parent;
 
     public WebInterface(MonitorStove parent) {
@@ -16,6 +17,7 @@ public class WebInterface {
         port(8080);
         temperature = parent.getTemp();
         damper = parent.getDamperPosition();
+        startHighTemp = parent.getHighTemp();
         get("/", (req, res) -> {
             String html = "<!DOCTYPE html>" +
                     "<html>" +
@@ -53,12 +55,19 @@ public class WebInterface {
                     "<body>" +
                     "<p id='counter'>Temperature: " + temperature + "</p>" +
                     "<p id='counter'>Damper: " + damper + "</p>" +
+                    "<p id='counter'>Start High Temp: " + startHighTemp + "</p>" +
                     "<form action='/increment' method='post'>" +
                     "<button type='submit'>refresh</button>" +
                     "</form>" +
                     "<p id='counter'>*****************************************</p>" +
                     "<form action='/reset' method='post'>" +
                     "<button type='submit'>Reset burn</button>" +
+                    "</form>" +
+                    "<p id='counter'>*****************************************</p>" +
+                    "<form action='/setHighTemp' method='post'>" +
+                    "<label for='highTemp'>Start High Temp: </label>" +
+                    "<input type='number' id='highTemp' name='highTemp' value='" + startHighTemp + "' required>" +
+                    "<button type='submit'>Set Start High Temp</button>" +
                     "</form>" +
                     "<p id='counter'>*****************************************</p>" +
                     "<form action='/open' method='post'>" +
@@ -79,6 +88,22 @@ public class WebInterface {
             incrementCounter();
             res.redirect("/"); // Redirect back to the main page
             return null; // Required for Spark
+        });
+
+        post("/setHighTemp", (req, res) -> {
+            String highTempParam = req.queryParams("highTemp");
+            if (highTempParam != null) {
+                try {
+                    int newHighTemp = Integer.parseInt(highTempParam);
+                    parent.setHighTemp(newHighTemp);
+                    startHighTemp = newHighTemp;
+                    logger.info("Updated start high temp to {}", newHighTemp);
+                } catch (NumberFormatException e) {
+                    logger.warn("Invalid high temp value provided: {}", highTempParam);
+                }
+            }
+            res.redirect("/");
+            return null;
         });
 
         post("/reset", (req, res) -> {
@@ -102,6 +127,7 @@ public class WebInterface {
     private void incrementCounter() {
         temperature = parent.getTemp();
         damper = parent.getDamperPosition();
+        startHighTemp = parent.getHighTemp();
         logger.info("Got Temp: {}", temperature);
     }
 
