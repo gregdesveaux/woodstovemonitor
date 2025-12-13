@@ -11,6 +11,9 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.Date;
 
 /**
@@ -74,6 +77,7 @@ public class MonitorStove {
                 System.out.println("Button Released!");
             }
         });
+        damperPosition = loadDamperPosition();
         //stepperMotor.performDemo(rotations);
         temperature = new Temperature();
         new WebInterface(this);
@@ -101,6 +105,47 @@ public class MonitorStove {
         return damperPosition;
     }
 
+    private void adjustDamperPosition(int delta) {
+        setDamperPosition(damperPosition + delta);
+    }
+
+    private void setDamperPosition(int position) {
+        damperPosition = Math.max(0, Math.min(DAMPER_FULLY_OPEN, position));
+        persistDamperPosition();
+    }
+
+    private void persistDamperPosition() {
+        try {
+            Files.writeString(
+                    DAMPER_POSITION_FILE,
+                    String.valueOf(damperPosition),
+                    StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING
+            );
+        } catch (IOException e) {
+            System.err.println("Failed to persist damper position: " + e.getMessage());
+        }
+    }
+
+    private int loadDamperPosition() {
+        if (!Files.exists(DAMPER_POSITION_FILE)) {
+            return DAMPER_FULLY_OPEN;
+        }
+
+        try {
+            String content = Files.readString(DAMPER_POSITION_FILE, StandardCharsets.UTF_8).trim();
+            if (content.isEmpty()) {
+                return DAMPER_FULLY_OPEN;
+            }
+            int position = Integer.parseInt(content);
+            return Math.max(0, Math.min(DAMPER_FULLY_OPEN, position));
+        } catch (IOException | NumberFormatException e) {
+            System.err.println("Failed to read damper position from file, using default: " + e.getMessage());
+            return DAMPER_FULLY_OPEN;
+        }
+    }
+
     void resetBurn() {
         inBurnLoop = false;
         System.out.println("Moving damper to open");
@@ -122,7 +167,7 @@ public class MonitorStove {
         System.out.println("closing damper");
         stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
         System.out.println("damper closed");
-        damperPosition = 0;
+        setDamperPosition(0);
     }
 
     void hotThread() {
