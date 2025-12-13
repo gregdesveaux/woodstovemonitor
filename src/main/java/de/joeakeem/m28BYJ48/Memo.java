@@ -9,7 +9,7 @@ import java.net.Socket;
 import java.net.URL;
 
 public class Memo {
-    public String location = "http://192.168.1.207:49153";
+    private static final String LOCATION = "http://192.168.1.207:49153";
 
     public void setOn() {
         System.out.println("Turning fan on ");
@@ -51,20 +51,20 @@ public class Memo {
         try {
             // String urlParameters = "param1=a&param2=b&param3=c";
             // String request = "http://example.com/index.php";
-            URL url = new URL(this.location + endpoint);
+            URL url = new URL(LOCATION + endpoint);
 
             Socket s = new Socket(InetAddress.getByName(url.getHost()),
                     url.getPort());
             try {
                 OutputStream os = s.getOutputStream();
-                StringBuffer sb = new StringBuffer();
+                StringBuilder sb = new StringBuilder();
 
-                sb.append("POST " + url + " HTTP/1.1\r\n");
+                sb.append("POST ").append(url).append(" HTTP/1.1\r\n");
                 sb.append("Content-Type: text/xml; charset=utf-8\r\n");
-                sb.append("Content-Length: " + content.getBytes().length
-                        + "\r\n");
+                sb.append("Content-Length: ").append(content.getBytes().length)
+                        .append("\r\n");
 
-                sb.append("SOAPACTION: \"" + soapCall + "\"\r\n");
+                sb.append("SOAPACTION: \"").append(soapCall).append("\"\r\n");
                 sb.append("\r\n");
 
                 os.write(sb.toString().getBytes());
