@@ -114,6 +114,15 @@ public class MonitorStove {
         return damperPosition;
     }
 
+    int getHighTemp() {
+        return highTemp;
+    }
+
+    void setHighTemp(int highTemp) {
+        this.highTemp = highTemp;
+        logger.info("Updated high temperature threshold to {}", highTemp);
+    }
+
     private void adjustDamperPosition(int delta) {
         setDamperPosition(damperPosition + delta);
     }
