@@ -1,8 +1,12 @@
 package de.joeakeem.m28BYJ48;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import static spark.Spark.*;
 
 public class SparkButtonExample {
 
+    private static final Logger logger = LoggerFactory.getLogger(SparkButtonExample.class);
     private static int counter = 0;
 
     public static void main(String[] args) {
@@ -62,7 +66,7 @@ public class SparkButtonExample {
 
     private static void incrementCounter() {
         counter++;
-        System.out.println("Counter incremented: " + counter);
+        logger.info("Counter incremented: {}", counter);
     }
 
 }

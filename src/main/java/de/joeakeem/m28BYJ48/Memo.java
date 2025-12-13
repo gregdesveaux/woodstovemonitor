@@ -7,12 +7,15 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.net.URL;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class Memo {
+    private static final Logger logger = LoggerFactory.getLogger(Memo.class);
     private static final String LOCATION = "http://192.168.1.207:49153";
 
     public void setOn() {
-        System.out.println("Turning fan on ");
+        logger.info("Turning fan on");
         String request = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
                 "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">\n" +
                 "  <s:Body>\n" +
@@ -26,11 +29,11 @@ public class Memo {
                 "urn:Belkin:service:basicevent:1#SetBinaryState",
                 request);
 
-        System.out.println("setOn " + resp);
+        logger.info("setOn {}", resp);
 
     }
     public void setOff()  {
-        System.out.println("Turning fan off");
+        logger.info("Turning fan off");
         String request = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
                 "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">\n" +
                 "  <s:Body>\n" +
@@ -44,7 +47,7 @@ public class Memo {
                 "urn:Belkin:service:basicevent:1#SetBinaryState",
                 request);
 
-        System.out.println("setOn " + resp);
+        logger.info("setOn {}", resp);
 
     }
     private String call(String endpoint, String soapCall, String content) {
