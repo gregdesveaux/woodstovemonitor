@@ -4,9 +4,12 @@ import com.pi4j.Pi4J;
 import com.pi4j.context.Context;
 import com.pi4j.io.i2c.I2C;
 import com.pi4j.io.i2c.I2CConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class Temperature {
 
+    private static final Logger logger = LoggerFactory.getLogger(Temperature.class);
     private final I2C i2c;
 
     public Temperature() {
@@ -30,7 +33,7 @@ public class Temperature {
         int objectTempRaw;
         try {
             objectTempRaw = readTemperatureRegister(i2c, 0x07);
-            System.out.println("Sensor temp: " + (int) Math.round(convertToCelsius(readTemperatureRegister(i2c, 0x06))));
+            logger.info("Sensor temp: {}", (int) Math.round(convertToCelsius(readTemperatureRegister(i2c, 0x06))));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

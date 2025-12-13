@@ -1,8 +1,12 @@
 package de.joeakeem.m28BYJ48;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import static spark.Spark.*;
 
 public class WebInterface {
 
+    private static final Logger logger = LoggerFactory.getLogger(WebInterface.class);
     private int temperature = 0;
     private int damper = 0;
     private final MonitorStove parent;
@@ -98,7 +102,7 @@ public class WebInterface {
     private void incrementCounter() {
         temperature = parent.getTemp();
         damper = parent.getDamperPosition();
-        System.out.println("Got Temp: " + temperature);
+        logger.info("Got Temp: {}", temperature);
     }
 
 }
