@@ -5,13 +5,13 @@ public class WebInterface {
 
     private int temperature = 0;
     private int damper = 0;
-    MonitorStove parent;
+    private final MonitorStove parent;
 
-    public  WebInterface(MonitorStove parent) {
-        this.parent=parent;
-        port(8080); // Set the port (optional, defaults to 4567)
-        temperature =parent.getTemp();
-        damper=parent.getDamperPosition();
+    public WebInterface(MonitorStove parent) {
+        this.parent = parent;
+        port(8080);
+        temperature = parent.getTemp();
+        damper = parent.getDamperPosition();
         get("/", (req, res) -> {
             String html = "<!DOCTYPE html>" +
                     "<html>" +
@@ -95,9 +95,9 @@ public class WebInterface {
 
     }
 
-    private  void incrementCounter() {
-        temperature =parent.getTemp();
-        damper=parent.getDamperPosition();
+    private void incrementCounter() {
+        temperature = parent.getTemp();
+        damper = parent.getDamperPosition();
         System.out.println("Got Temp: " + temperature);
     }
 
