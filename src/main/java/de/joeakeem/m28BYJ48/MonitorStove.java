@@ -23,7 +23,7 @@ public class MonitorStove {
     private static final int START_HIGH_TEMP = 230;
 
     private final Temperature temperature;
-    private final StepperMotor28BYJ48 stepperMotor;
+    private StepperMotor28BYJ48 stepperMotor = null;
     private final FileOutputStream tempFile;
     private final Memo memo;
 
