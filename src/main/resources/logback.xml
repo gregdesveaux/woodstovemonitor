@@ -1,6 +1,6 @@
 <configuration>
 
-  <property name="LOG_DIR" value="logs" />
+  <property name="LOG_DIR" value="/home/gdesveau/logs" />
 
   <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
     <encoder>
