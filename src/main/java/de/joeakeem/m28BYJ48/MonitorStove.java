@@ -60,6 +60,7 @@ public class MonitorStove {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             System.out.println("Closing damper");
             stepperMotor.moveDamper(damperPosition, DIRECTION_CLOSE);
+            persistDamperPosition();
             System.out.println("Damper Closed");
         }));
         long debounce = 3000;
@@ -90,6 +91,7 @@ public class MonitorStove {
         System.out.println("Temp: " + temp);
         System.out.println("Moving damper to open");
         stepperMotor.moveDamper(damperPosition, DIRECTION_OPEN);
+        persistDamperPosition();
         emergencyCloseThread();
         hotThread();
         try {
@@ -155,6 +157,7 @@ public class MonitorStove {
         System.out.println("Moving damper to open");
         stepperMotor.moveDamper(DAMPER_FULLY_OPEN - damperPosition, DIRECTION_OPEN);
         damperPosition = DAMPER_FULLY_OPEN;
+        persistDamperPosition();
     }
 
     void openDamper() {
@@ -162,6 +165,7 @@ public class MonitorStove {
         if (damperPosition < 2700) {
             stepperMotor.moveDamper(steps, DIRECTION_OPEN);
             damperPosition = damperPosition + steps;
+            persistDamperPosition();
             System.out.println("moving damper to: " + damperPosition);
         }
     }
@@ -170,6 +174,7 @@ public class MonitorStove {
         int steps = damperPosition;
         System.out.println("closing damper");
         stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
+        persistDamperPosition();
         System.out.println("damper closed");
         setDamperPosition(0);
     }
@@ -186,6 +191,7 @@ public class MonitorStove {
 
                     stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
                     damperPosition -= steps;
+                    persistDamperPosition();
                     System.out.println("moving damper to: " + damperPosition);
                 }
                 int roomTemp = temperature.getRoomTemp();
@@ -221,18 +227,21 @@ public class MonitorStove {
 
                     stepperMotor.moveDamper(steps, DIRECTION_OPEN);
                     damperPosition += steps;
+                    persistDamperPosition();
                     System.out.println("moving damper to: " + damperPosition);
                 } else if (temp < (highTemp - 25) && inBurnLoop && damperPosition < 300) {
                     int steps = 300;
 
                     stepperMotor.moveDamper(steps, DIRECTION_OPEN);
                     damperPosition += steps;
+                    persistDamperPosition();
                     System.out.println("moving damper to: " + damperPosition);
                 } else if (temp < (highTemp - 40) && inBurnLoop && damperPosition < 1200) {
                     int steps = 300;
 
                     stepperMotor.moveDamper(steps, DIRECTION_OPEN);
                     damperPosition += steps;
+                    persistDamperPosition();
                     System.out.println("moving damper to: " + damperPosition);
                 } else if (temp < 190 && inBurnLoop && damperPosition > 1000) {
                     int steps = damperPosition;
@@ -240,6 +249,7 @@ public class MonitorStove {
                     stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
                     inBurnLoop = false;
                     damperPosition = 0;
+                    persistDamperPosition();
                     System.out.println("Fire is out, moving damper to: " + damperPosition);
                 }
                 try {
@@ -274,6 +284,7 @@ public class MonitorStove {
                     stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
                     inBurnLoop = true;
                     damperPosition = 600;
+                    persistDamperPosition();
                     System.out.println("temp is above 250 and rise is greater than 6. starting burn loop and moving damper to: " + damperPosition);
                 } else if (currentTemp > (highTemp + 15) && !inBurnLoop) {
                     int steps = 2400;
@@ -284,16 +295,19 @@ public class MonitorStove {
                     stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
                     inBurnLoop = true;
                     damperPosition = 600;
+                    persistDamperPosition();
                     System.out.println("moving damper to: " + damperPosition);
                 } else if (currentTemp > 280 && damperPosition > 300) {
                     int steps = 300;
                     stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
                     damperPosition -= steps;
+                    persistDamperPosition();
                     System.out.println("Fire is too hot, moving damper to: " + damperPosition);
                 } else if (currentTemp > 290 && damperPosition > 0) {
                     int steps = 300;
                     stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
                     damperPosition -= steps;
+                    persistDamperPosition();
                     System.out.println("Fire is too hot, moving damper to: " + damperPosition);
                 }
                 previousTemp = currentTemp;
