@@ -60,12 +60,7 @@ public class MonitorStove {
         }
         Context pi4j = Pi4J.newAutoContext();
         stepperMotor = new StepperMotor28BYJ48(pi4j);
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            logger.info("Closing damper");
-            stepperMotor.moveDamper(damperPosition, DIRECTION_CLOSE);
-            persistDamperPosition();
-            logger.info("Damper Closed");
-        }));
+
         long debounce = 3000;
         DigitalInput button = pi4j.create(
                 DigitalInput.newConfigBuilder(pi4j)
