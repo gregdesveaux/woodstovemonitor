@@ -47,11 +47,6 @@ public class MonitorStove {
     }
 
     public MonitorStove() {
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            System.out.println("Closing damper");
-            stepperMotor.moveDamper(damperPosition, DIRECTION_CLOSE);
-            System.out.println("Damper Closed");
-        }));
         memo = new Memo();
         System.setProperty("spark.logging.quiet", "true");
         File f = new File("/home/gdesveau/timeVStemp.csv");
@@ -62,6 +57,11 @@ public class MonitorStove {
         }
         Context pi4j = Pi4J.newAutoContext();
         stepperMotor = new StepperMotor28BYJ48(pi4j);
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("Closing damper");
+            stepperMotor.moveDamper(damperPosition, DIRECTION_CLOSE);
+            System.out.println("Damper Closed");
+        }));
         long debounce = 3000;
         DigitalInput button = pi4j.create(
                 DigitalInput.newConfigBuilder(pi4j)
