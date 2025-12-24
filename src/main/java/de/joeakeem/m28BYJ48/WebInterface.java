@@ -58,6 +58,13 @@ public class WebInterface {
                     "button:hover {" +
                     "  background-color: #3e8e41;" +
                     "}" +
+                    ".restart-button {" +
+                    "  background-color: #f44336;" +
+                    "  margin-top: 40px;" +
+                    "}" +
+                    ".restart-button:hover {" +
+                    "  background-color: #d32f2f;" +
+                    "}" +
                     "</style>" +
                     "</head>" +
                     "<body>" +
@@ -85,6 +92,9 @@ public class WebInterface {
                     "<p id='counter'>*****************************************</p>" +
                     "<form action='/close' method='post'>" +
                     "<button type='submit'>Close Damper</button>" +
+                    "</form>" +
+                    "<form action='/restart' method='post'>" +
+                    "<button type='submit' class='restart-button'>Restart App</button>" +
                     "</form>" +
                     "</body>" +
                     "</html>";
@@ -128,6 +138,19 @@ public class WebInterface {
         post("/close", (req, res) -> {
             parent.closeDamper();
             res.redirect("/");
+            return null;
+        });
+
+        post("/restart", (req, res) -> {
+            logger.info("Restart requested via web interface");
+            res.redirect("/");
+            new Thread(() -> {
+                try {
+                    Thread.sleep(200);
+                } catch (InterruptedException ignored) {
+                }
+                System.exit(0);
+            }).start();
             return null;
         });
 
