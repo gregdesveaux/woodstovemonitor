@@ -10,6 +10,7 @@ public class WebInterface {
     private int temperature = 0;
     private int damper = 0;
     private int startHighTemp = 0;
+    private String status = "";
     private final MonitorStove parent;
 
     public WebInterface(MonitorStove parent) {
@@ -18,7 +19,9 @@ public class WebInterface {
         temperature = parent.getTemp();
         damper = parent.getDamperPosition();
         startHighTemp = parent.getHighTemp();
+        status = parent.getStatus();
         get("/", (req, res) -> {
+            incrementCounter();
             String html = "<!DOCTYPE html>" +
                     "<html>" +
                     "<head>" +
@@ -33,6 +36,11 @@ public class WebInterface {
                     "  justify-content: center;" +
                     "  min-height: 100vh;" +
                     "  margin: 0;" +
+                    "}" +
+                    "#status {" +
+                    "  font-size: 26px;" +
+                    "  margin-bottom: 20px;" +
+                    "  font-weight: bold;" +
                     "}" +
                     "#counter {" +
                     "  font-size: 24px;" +
@@ -53,6 +61,7 @@ public class WebInterface {
                     "</style>" +
                     "</head>" +
                     "<body>" +
+                    "<div id='status'>Status: " + status + "</div>" +
                     "<p id='counter'>Temperature: " + temperature + "</p>" +
                     "<p id='counter'>Damper: " + damper + "</p>" +
                     "<p id='counter'>Start High Temp: " + startHighTemp + "</p>" +
@@ -128,6 +137,7 @@ public class WebInterface {
         temperature = parent.getTemp();
         damper = parent.getDamperPosition();
         startHighTemp = parent.getHighTemp();
+        status = parent.getStatus();
         logger.info("Got Temp: {}", temperature);
     }
 

@@ -42,6 +42,7 @@ public class MonitorStove {
     private int highTemp = START_HIGH_TEMP;
     private boolean inBurnLoop = false;
     private boolean fanOn = false;
+    private String status = "Monitoring";
 
     public static void main(String[] args) {
 
@@ -86,6 +87,7 @@ public class MonitorStove {
         new WebInterface(this);
 
         temp = temperature.getTemp();
+        status = "Monitoring - system started";
         logger.info("Temp: {}", temp);
         //logger.info("Moving damper to open");
         //stepperMotor.moveDamper(damperPosition, DIRECTION_OPEN);
@@ -111,6 +113,15 @@ public class MonitorStove {
 
     int getHighTemp() {
         return highTemp;
+    }
+
+    String getStatus() {
+        return status;
+    }
+
+    private void setStatus(String status) {
+        this.status = status;
+        logger.info("Status updated: {}", status);
     }
 
     void setHighTemp(int highTemp) {
@@ -165,6 +176,7 @@ public class MonitorStove {
         stepperMotor.moveDamper(DAMPER_FULLY_OPEN - damperPosition, DIRECTION_OPEN);
         damperPosition = DAMPER_FULLY_OPEN;
         persistDamperPosition();
+        setStatus("Burn reset - damper opened");
     }
 
     void openDamper() {
@@ -174,6 +186,7 @@ public class MonitorStove {
             damperPosition = damperPosition + steps;
             persistDamperPosition();
             logger.info("moving damper to: {}", damperPosition);
+            setStatus("Damper opened a bit manually");
         }
     }
 
@@ -184,6 +197,7 @@ public class MonitorStove {
         persistDamperPosition();
         logger.info("damper closed");
         setDamperPosition(0);
+        setStatus("Damper closed manually");
     }
 
     void hotThread() {
@@ -200,6 +214,7 @@ public class MonitorStove {
                     damperPosition -= steps;
                     persistDamperPosition();
                     logger.info("moving damper to: {}", damperPosition);
+                    setStatus("Managing heat - damper closing");
                 } else if (temp > (highTemp + 20) && inBurnLoop && damperPosition > 0) {
                     int steps = 100;
 
@@ -207,6 +222,7 @@ public class MonitorStove {
                     damperPosition -= steps;
                     persistDamperPosition();
                     logger.info("moving damper to: {}", damperPosition);
+                    setStatus("Managing heat - damper closing");
                 }
                 int roomTemp = temperature.getRoomTemp();
                 if (roomTemp > 50 && !fanOn) {
@@ -245,6 +261,7 @@ public class MonitorStove {
                     damperPosition += steps;
                     persistDamperPosition();
                     logger.info("temp < (highTemp) && inBurnLoop && damperPosition < 600 - moving damper to: {}", damperPosition);
+                    setStatus("Managing heat - damper opening");
                 } else if (temp < (highTemp - 20) && inBurnLoop && damperPosition < 1200) {
                     int steps = 300;
 
@@ -252,6 +269,7 @@ public class MonitorStove {
                     damperPosition += steps;
                     persistDamperPosition();
                     logger.info("temp < (highTemp - 20) && inBurnLoop && damperPosition < 600 - moving damper to: {}", damperPosition);
+                    setStatus("Managing heat - damper opening");
                 } else if (temp < (highTemp - 40) && inBurnLoop && damperPosition < 2400) {
                     int steps = 300;
 
@@ -259,6 +277,7 @@ public class MonitorStove {
                     damperPosition += steps;
                     persistDamperPosition();
                     logger.info("temp < (highTemp - 40) && inBurnLoop && damperPosition < 1200 - moving damper to: {}", damperPosition);
+                    setStatus("Managing heat - damper opening");
                 } else if (temp < 190 && inBurnLoop && damperPosition > 1000) {
                     int steps = damperPosition;
 
@@ -267,6 +286,7 @@ public class MonitorStove {
                     damperPosition = 0;
                     persistDamperPosition();
                     logger.info("Fire is out, moving damper to: {}", damperPosition);
+                    setStatus("Fire is out");
                 }
                 try {
                     Thread.sleep(1000 * 60 * 10);
@@ -305,6 +325,7 @@ public class MonitorStove {
                     damperPosition = damperPosition-steps;
                     persistDamperPosition();
                     logger.info("temp is above 250 and rise is greater than 6. starting burn loop and moving damper to: {}", damperPosition);
+                    setStatus("Burn loop started - damper closing");
                 } else if (currentTemp > (highTemp + 15) && !inBurnLoop) {
                     int steps = 6400;
                     if (damperPosition - steps < 600) {
@@ -317,18 +338,21 @@ public class MonitorStove {
                     damperPosition -= steps;
                     persistDamperPosition();
                     logger.info("moving damper to: {}", damperPosition);
+                    setStatus("Burn loop started - damper closing");
                 } else if (currentTemp > 280 && damperPosition > 300) {
                     int steps = 300;
                     stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
                     damperPosition -= steps;
                     persistDamperPosition();
                     logger.info("Fire is too hot, moving damper to: {}", damperPosition);
+                    setStatus("Fire too hot - closing damper");
                 } else if (currentTemp > 290 && damperPosition > 0) {
                     int steps = 300;
                     stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
                     damperPosition -= steps;
                     persistDamperPosition();
                     logger.info("Fire is too hot, moving damper to: {}", damperPosition);
+                    setStatus("Fire too hot - closing damper");
                 }
                 previousTemp = currentTemp;
                 try {
