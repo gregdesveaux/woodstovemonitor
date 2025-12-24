@@ -260,7 +260,7 @@ public class MonitorStove {
                     damperPosition += steps;
                     persistDamperPosition();
                     logger.info("temp < (highTemp) && inBurnLoop && damperPosition < 600 - moving damper to: {}", damperPosition);
-                    setStatus("Managing heat - damper opening");
+                    setStatus("IN BURN LOOP - OPENING DAMPER");
                 } else if (temp < (highTemp - 20) && inBurnLoop && damperPosition < 12*00) {
                     int steps = 300;
 
@@ -268,7 +268,7 @@ public class MonitorStove {
                     damperPosition += steps;
                     persistDamperPosition();
                     logger.info("temp < (highTemp - 20) && inBurnLoop && damperPosition < 600 - moving damper to: {}", damperPosition);
-                    setStatus("Managing heat - damper opening");
+                    setStatus("IN BURN LOOP - OPENING DAMPER");
                 } else if (temp < (highTemp - 40) && inBurnLoop && damperPosition < 2400) {
                     int steps = 300;
 
@@ -276,7 +276,7 @@ public class MonitorStove {
                     damperPosition += steps;
                     persistDamperPosition();
                     logger.info("temp < (highTemp - 40) && inBurnLoop && damperPosition < 1200 - moving damper to: {}", damperPosition);
-                    setStatus("Managing heat - damper opening");
+                    setStatus("IN BURN LOOP - OPENING DAMPER");
                 } else if (temp < 190 && inBurnLoop && damperPosition > 1000) {
                     int steps = damperPosition;
 
