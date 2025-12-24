@@ -12,7 +12,7 @@ import static com.pi4j.io.gpio.digital.DigitalState.LOW;
 public class StepperMotor28BYJ48 {
 
     private static final Logger LOG = LoggerFactory.getLogger(StepperMotor28BYJ48.class);
-    private static final int STEP_DELAY_MILLIS = 5;
+    private static final int STEP_DELAY_MILLIS = 20;
 
     private final Context pi4j;
     private final DigitalOutput stepPin;
