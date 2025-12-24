@@ -82,7 +82,9 @@ public class Memo {
                 s.close();
             }
         } catch (Exception e) {
-            throw new RuntimeException("Can't call device", e);
+            logger.info("Can't call device", e);
+            return "failed";
         }
+
     }
 }

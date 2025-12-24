@@ -23,10 +23,10 @@ import java.util.Date;
  */
 public class MonitorStove {
     private static final Logger logger = LoggerFactory.getLogger(MonitorStove.class);
-    private static final int DAMPER_FULLY_OPEN = 3000;
+    private static final int DAMPER_FULLY_OPEN = 7000;
     private static final int DIRECTION_CLOSE = 1;
     private static final int DIRECTION_OPEN = 0;
-    private static final int START_HIGH_TEMP = 230;
+    private static final int START_HIGH_TEMP = 200;
     private static final Path DAMPER_POSITION_FILE = Path.of(
             System.getProperty("user.home"),
             "damper_position.txt"
@@ -87,8 +87,8 @@ public class MonitorStove {
 
         temp = temperature.getTemp();
         logger.info("Temp: {}", temp);
-        logger.info("Moving damper to open");
-        stepperMotor.moveDamper(damperPosition, DIRECTION_OPEN);
+        //logger.info("Moving damper to open");
+        //stepperMotor.moveDamper(damperPosition, DIRECTION_OPEN);
         persistDamperPosition();
         emergencyCloseThread();
         hotThread();
@@ -169,7 +169,7 @@ public class MonitorStove {
 
     void openDamper() {
         int steps = 300;
-        if (damperPosition < 2700) {
+        if (damperPosition < 6700) {
             stepperMotor.moveDamper(steps, DIRECTION_OPEN);
             damperPosition = damperPosition + steps;
             persistDamperPosition();
@@ -195,6 +195,13 @@ public class MonitorStove {
                 logger.info("inBurnloop: {}", inBurnLoop);
                 if (temp > (highTemp + 20) && inBurnLoop && damperPosition > 300) {
                     int steps = 300;
+
+                    stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
+                    damperPosition -= steps;
+                    persistDamperPosition();
+                    logger.info("moving damper to: {}", damperPosition);
+                } else if (temp > (highTemp + 20) && inBurnLoop && damperPosition > 0) {
+                    int steps = 100;
 
                     stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
                     damperPosition -= steps;
@@ -231,21 +238,21 @@ public class MonitorStove {
                 temp = temperature.getTemp();
                 logger.info("Temp: {}", temp);
                 logger.info("Damper: {}", damperPosition);
-                if (temp < (highTemp - 20) && inBurnLoop && damperPosition < 600) {
+                if (temp < (highTemp ) && inBurnLoop && damperPosition < 600) {
+                    int steps = 300;
+
+                    stepperMotor.moveDamper(steps, DIRECTION_OPEN);
+                    damperPosition += steps;
+                    persistDamperPosition();
+                    logger.info("temp < (highTemp) && inBurnLoop && damperPosition < 600 - moving damper to: {}", damperPosition);
+                } else if (temp < (highTemp - 20) && inBurnLoop && damperPosition < 1200) {
                     int steps = 300;
 
                     stepperMotor.moveDamper(steps, DIRECTION_OPEN);
                     damperPosition += steps;
                     persistDamperPosition();
                     logger.info("temp < (highTemp - 20) && inBurnLoop && damperPosition < 600 - moving damper to: {}", damperPosition);
-                } else if (temp < (highTemp - 25) && inBurnLoop && damperPosition < 300) {
-                    int steps = 300;
-
-                    stepperMotor.moveDamper(steps, DIRECTION_OPEN);
-                    damperPosition += steps;
-                    persistDamperPosition();
-                    logger.info("temp < (highTemp - 25) && inBurnLoop && damperPosition < 300 - moving damper to: {}", damperPosition);
-                } else if (temp < (highTemp - 40) && inBurnLoop && damperPosition < 1200) {
+                } else if (temp < (highTemp - 40) && inBurnLoop && damperPosition < 2400) {
                     int steps = 300;
 
                     stepperMotor.moveDamper(steps, DIRECTION_OPEN);
@@ -287,7 +294,7 @@ public class MonitorStove {
                     logger.error("Failed to write temperature to file", ee);
                 }
                 if (currentTemp > highTemp && (currentTemp - previousTemp) > 6 && !inBurnLoop) {
-                    int steps = 2400;
+                    int steps = 6400;
                     if (damperPosition - steps < 600) {
                         steps = damperPosition - 600;
                     }
@@ -299,7 +306,7 @@ public class MonitorStove {
                     persistDamperPosition();
                     logger.info("temp is above 250 and rise is greater than 6. starting burn loop and moving damper to: {}", damperPosition);
                 } else if (currentTemp > (highTemp + 15) && !inBurnLoop) {
-                    int steps = 2400;
+                    int steps = 6400;
                     if (damperPosition - steps < 600) {
                         steps = damperPosition - 600;
                     }
