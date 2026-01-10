@@ -70,10 +70,22 @@ public class Memo {
                 sb.append("SOAPACTION: \"").append(soapCall).append("\"\r\n");
                 sb.append("\r\n");
 
-                os.write(sb.toString().getBytes());
-                os.write(content.getBytes());
-
-                os.flush();
+                IOException lastWriteException = null;
+                for (int attempt = 1; attempt <= 5; attempt++) {
+                    try {
+                        os.write(sb.toString().getBytes());
+                        os.write(content.getBytes());
+                        os.flush();
+                        lastWriteException = null;
+                        break;
+                    } catch (IOException e) {
+                        lastWriteException = e;
+                        logger.warn("Failed to write request (attempt {} of 5)", attempt, e);
+                    }
+                }
+                if (lastWriteException != null) {
+                    throw lastWriteException;
+                }
 
                 String resp = IOUtils.toString(s.getInputStream());
                 return resp;
