@@ -306,7 +306,7 @@ public class MonitorStove {
                         setInBurnLoop(true);
                         setStatus("Above target - closing damper");
                     }
-                } else if (temp < low) {
+                } else if (temp < low && inBurnLoop) {
                     // Too cool -> open proportionally (but don't exceed fully open)
                     int steps = computeStepsOpen(-error);
                     int newPos = Math.min(DAMPER_FULLY_OPEN, damperPosition + steps);
