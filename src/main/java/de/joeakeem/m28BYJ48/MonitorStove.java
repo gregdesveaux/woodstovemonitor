@@ -36,7 +36,9 @@ public class MonitorStove {
     private final StepperMotor28BYJ48 stepperMotor;
     private final FileOutputStream tempFile;
     private final Memo memo;
-    private record DamperState(int position, boolean inBurnLoop) {}
+
+    private record DamperState(int position, boolean inBurnLoop) {
+    }
 
     private int damperPosition = DAMPER_FULLY_OPEN;
     private int temp = 0;
@@ -44,6 +46,20 @@ public class MonitorStove {
     private boolean inBurnLoop = false;
     private boolean fanOn = false;
     private String status = "Monitoring";
+
+    // Hysteresis band: no movement while inside [TARGET - BAND, TARGET + BAND]
+    private static final int BAND_C = 5;
+
+    // Keep some air while burning to avoid smolder/smoke (tune this for your stove)
+    private static final int MIN_BURN_OPEN = 0;  // try 600–1200
+
+    // Safety: if truly too hot, you can go below MIN_BURN_OPEN
+    private static final int OVERHEAT_C = 270;
+    private static final int FIRE_OUT_TEMP_C = 180;
+    private static final int FIRE_OUT_OPEN_THRESHOLD = 2000;
+    private static final double COOLING_SLOPE_C_PER_MIN = -0.3; // tune: -0.2 to -1.0
+    private static final int COAL_PRESERVE_POSITION = 0;        // or 200–400 if you want a tiny crack
+
 
     public static void main(String[] args) {
 
@@ -95,14 +111,7 @@ public class MonitorStove {
         logger.info("Temp: {}", temp);
         //logger.info("Moving damper to open");
         //stepperMotor.moveDamper(damperPosition, DIRECTION_OPEN);
-        emergencyCloseThread();
-        hotThread();
-        try {
-            Thread.sleep(1000 * 60 * 1);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-        coldThread();
+        controlThread();
 
     }
 
@@ -209,159 +218,162 @@ public class MonitorStove {
         setStatus("Damper closed manually");
     }
 
-    void hotThread() {
-       Thread hotThread=new Thread(() -> {
+    void controlThread() {
+        Thread t = new Thread(() -> {
+            Ewma tempFilter = new Ewma(0.25);     // tune 0.15–0.35
+            Ewma slopeFilter = new Ewma(0.30);
+
+            int lastTemp = temperature.getTemp();
+            long lastTs = System.currentTimeMillis();
+
             while (true) {
-                temp = temperature.getTemp();
-                logger.info("Temp: {}", temp);
-                logger.info("Damper: {}", damperPosition);
-                logger.info("inBurnloop: {}", inBurnLoop);
-                if (temp > (highTemp + 20) && inBurnLoop && damperPosition > 300) {
-                    int steps = 300;
+                int raw = temperature.getTemp();
+                long now = System.currentTimeMillis();
 
-                    stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
-                    setDamperPosition(damperPosition - steps);
-                    logger.info("moving damper to: {}", damperPosition);
-                    setStatus("Managing heat - damper closing");
-                } else if (temp > (highTemp + 20) && inBurnLoop && damperPosition > 0) {
-                    int steps = 100;
+                double dtMin = Math.max(0.25, (now - lastTs) / 60000.0); // minutes
+                double slope = (raw - lastTemp) / dtMin;                // °C per minute
 
-                    stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
-                    setDamperPosition(damperPosition - steps);
-                    logger.info("moving damper to: {}", damperPosition);
-                    setStatus("Managing heat - damper closing");
+                double temp = tempFilter.update(raw);
+                double dTdt = slopeFilter.update(slope);
+
+                // Decide whether we're “burning” (so MIN_BURN_OPEN applies)
+                // This is intentionally simple + stable.
+                boolean burningNow = inBurnLoop || temp >= 205;
+
+                // --- SAFETY OVERRIDE (too hot) ---
+                if (raw >= OVERHEAT_C) {
+                    int steps = Math.min(0, damperPosition); // close hard, but bounded
+                    if (steps > 0) {
+                        stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
+                        setDamperPosition(damperPosition - steps);
+                        setStatus("OVERHEAT - closing damper");
+                    }
+                    setInBurnLoop(true);
+                    sleepQuietly(30_000);
+                    lastTemp = raw;
+                    lastTs = now;
+                    continue;
                 }
-                int roomTemp = temperature.getRoomTemp();
-                if (roomTemp > 50 && !fanOn) {
-                    memo.setOn();
-                    fanOn = true;
-                } else if (roomTemp < 50 && roomTemp > 0 && fanOn) {
-                    memo.setOff();
-                    fanOn = false;
-                }
-                try {
-                    Thread.sleep(1000 * 60 * 5);
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
-            }
-        });
-       hotThread.setName("holt thread");
-       hotThread.start();
-    }
+// --- COAL PRESERVE OVERRIDE (fire is out) ---
+// If we're wide open and cooling and below 180C, close to preserve coals.
+                if (damperPosition > FIRE_OUT_OPEN_THRESHOLD
+                        && raw <= FIRE_OUT_TEMP_C
+                        && dTdt <= COOLING_SLOPE_C_PER_MIN) {
 
-    void coldThread() {
-       Thread coldThread= new Thread(() -> {
-            try {
-                Thread.sleep(1000 * 60 * 20);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-            while (true) {
-                temp = temperature.getTemp();
-                logger.info("Temp: {}", temp);
-                logger.info("Damper: {}", damperPosition);
-                if (temp < (highTemp ) && inBurnLoop && damperPosition < 600) {
-                    int steps = 300;
+                    int targetPos = COAL_PRESERVE_POSITION;
 
-                    stepperMotor.moveDamper(steps, DIRECTION_OPEN);
-                    setDamperPosition(damperPosition + steps);
-                    logger.info("temp < (highTemp) && inBurnLoop && damperPosition < 600 - moving damper to: {}", damperPosition);
-                    setStatus("IN BURN LOOP - OPENING DAMPER");
-                } else if (temp < (highTemp - 20) && inBurnLoop && damperPosition < 12*00) {
-                    int steps = 300;
+                    // Close in chunks so you don't hammer the mechanism.
+                    int delta = damperPosition - targetPos;
+                    int steps = Math.min(800, delta); // "close hard" but bounded per cycle
 
-                    stepperMotor.moveDamper(steps, DIRECTION_OPEN);
-                    setDamperPosition(damperPosition + steps);
-                    logger.info("temp < (highTemp - 20) && inBurnLoop && damperPosition < 600 - moving damper to: {}", damperPosition);
-                    setStatus("IN BURN LOOP - OPENING DAMPER");
-                } else if (temp < (highTemp - 40) && inBurnLoop && damperPosition < 2400) {
-                    int steps = 300;
+                    if (steps > 0) {
+                        stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
+                        setDamperPosition(damperPosition - steps);
+                        setStatus("Fire out - closing damper to preserve coals");
+                    }
 
-                    stepperMotor.moveDamper(steps, DIRECTION_OPEN);
-                    setDamperPosition(damperPosition + steps);
-                    logger.info("temp < (highTemp - 40) && inBurnLoop && damperPosition < 1200 - moving damper to: {}", damperPosition);
-                    setStatus("IN BURN LOOP - OPENING DAMPER");
-                } else if (temp < 190 && inBurnLoop && damperPosition > 1000) {
-                    int steps = damperPosition;
-
-                    stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
+                    // This is not "burning" anymore.
                     setInBurnLoop(false);
-                    setDamperPosition(0);
-                    logger.info("Fire is out, moving damper to: {}", damperPosition);
-                    setStatus("Fire is out - NOT IN BURN LOOP");
+
+                    sleepQuietly(30_000);
+                    lastTemp = raw;
+                    lastTs = now;
+                    continue;
                 }
-                try {
-                    Thread.sleep(1000 * 60 * 10);
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
+                // Target can still be adjustable from UI if you want:
+                int target = highTemp; // set highTemp to 220 from UI, or just use TARGET_TEMP_C
+                int low = target - BAND_C;
+                int high = target + BAND_C;
+
+                int minOpen = burningNow ? MIN_BURN_OPEN : 0;
+
+                // Predictive nudge: if rising fast, start closing a bit early
+                // (prevents overshoot)
+                if (dTdt > 3.0) { // >3°C/min is a “getting spicy” slope for many stoves
+                    high -= 2;
                 }
+
+                int error = (int) Math.round(temp) - target;
+
+                if (temp > high) {
+                    // Too hot -> close proportionally
+                    int steps = computeStepsClose(error);
+                    int newPos = Math.max(minOpen, damperPosition - steps);
+                    int delta = damperPosition - newPos;
+                    if (delta > 0) {
+                        stepperMotor.moveDamper(delta, DIRECTION_CLOSE);
+                        setDamperPosition(newPos);
+                        setInBurnLoop(true);
+                        setStatus("Above target - closing damper");
+                    }
+                } else if (temp < low) {
+                    // Too cool -> open proportionally (but don't exceed fully open)
+                    int steps = computeStepsOpen(-error);
+                    int newPos = Math.min(DAMPER_FULLY_OPEN, damperPosition + steps);
+                    int delta = newPos - damperPosition;
+                    if (delta > 0) {
+                        stepperMotor.moveDamper(delta, DIRECTION_OPEN);
+                        setDamperPosition(newPos);
+                        setInBurnLoop(true);
+                        setStatus("Below target - opening damper");
+                    }
+                } else {
+                    // Inside the band: do nothing (this is the magic that stops flapping)
+                    setStatus("Holding steady near target");
+                }
+
+                // If it cools way down, exit burn loop (your old logic did this at 190)
+                if (raw < 190 && burningNow) {
+                    setInBurnLoop(false);
+                }
+
+                lastTemp = raw;
+                lastTs = now;
+                sleepQuietly(45_000); // 30–60s is a good starting point
             }
         });
-       coldThread.setName("ColdThread");
-       coldThread.start();
+
+        t.setName("DamperController");
+        t.setDaemon(true);
+        t.start();
     }
 
-    void emergencyCloseThread() {
-      Thread e=  new Thread(() -> {
-            int previousTemp = 300;
-            while (true) {
-                int currentTemp = temperature.getTemp();
-                logger.info("Temp: {}", currentTemp);
-                logger.info("Damper: {}", damperPosition);
-                Date date = new Date();
-                String timeTemp = date + "," + currentTemp + "," + damperPosition + "\n";
-                try {
-                    tempFile.write(timeTemp.getBytes(StandardCharsets.UTF_8));
-                } catch (IOException ee) {
-                    logger.error("Failed to write temperature to file", ee);
-                }
-                if (currentTemp > highTemp && (currentTemp - previousTemp) > 6 && !inBurnLoop) {
-                    int steps = 6400;
-                    if (damperPosition - steps < 600) {
-                        steps = damperPosition - 600;
-                    }
-                    if (steps < 0) steps = 0;
-
-                    stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
-                    setInBurnLoop(true);
-                    setDamperPosition(damperPosition - steps);
-                    logger.info("temp is above 250 and rise is greater than 6. starting burn loop and moving damper to: {}", damperPosition);
-                    setStatus("Burn loop started");
-                } else if (currentTemp > (highTemp + 15) && !inBurnLoop) {
-                    int steps = 6400;
-                    if (damperPosition - steps < 600) {
-                        steps = damperPosition - 600;
-                    }
-                    if (steps < 0) steps = 0;
-
-                    stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
-                    setInBurnLoop(true);
-                    setDamperPosition(damperPosition - steps);
-                    logger.info("moving damper to: {}", damperPosition);
-                    setStatus("Burn loop started");
-                } else if (currentTemp > 280 && damperPosition > 300) {
-                    int steps = 300;
-                    stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
-                    setDamperPosition(damperPosition - steps);
-                    logger.info("Fire is too hot, moving damper to: {}", damperPosition);
-                    setStatus("Fire too hot - closing damper 300");
-                } else if (currentTemp > 290 && damperPosition > 0) {
-                    int steps = 300;
-                    stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
-                    setDamperPosition(damperPosition - steps);
-                    logger.info("Fire is too hot, moving damper to: {}", damperPosition);
-                    setStatus("Fire way too hot - closing damper 300");
-                }
-                previousTemp = currentTemp;
-                try {
-                    Thread.sleep(60000);
-                } catch (InterruptedException ee) {
-                    throw new RuntimeException(ee);
-                }
-            }
-        });
-      e.setName("Emergency Close Thread");
-      e.start();
+    private static int computeStepsClose(int errorC) {
+        // errorC is how many °C above target you are (positive)
+        if (errorC >= 40) return 600;
+        if (errorC >= 25) return 400;
+        if (errorC >= 12) return 250;
+        return 150;
     }
+
+    private static int computeStepsOpen(int belowC) {
+        // belowC is how many °C below target you are (positive)
+        if (belowC >= 40) return 600;
+        if (belowC >= 25) return 400;
+        if (belowC >= 12) return 250;
+        return 150;
+    }
+
+    private static void sleepQuietly(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private static final class Ewma {
+        private final double alpha;
+        private Double v;
+
+        private Ewma(double alpha) {
+            this.alpha = alpha;
+        }
+
+        double update(double x) {
+            v = (v == null) ? x : (alpha * x + (1 - alpha) * v);
+            return v;
+        }
+    }
+
 }
