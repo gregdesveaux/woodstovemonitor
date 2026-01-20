@@ -296,6 +296,13 @@ public class MonitorStove {
                 int error = (int) Math.round(temp) - target;
 
                 if (temp > high) {
+                    if(!inBurnLoop){
+                        int newPos=3000;
+                        int delta = damperPosition - newPos;
+                        stepperMotor.moveDamper(delta, DIRECTION_CLOSE);
+                        setDamperPosition(newPos);
+
+                    }
                     // Too hot -> close proportionally
                     int steps = computeStepsClose(error);
                     int newPos = Math.max(minOpen, damperPosition - steps);
@@ -317,15 +324,15 @@ public class MonitorStove {
                         setInBurnLoop(true);
                         setStatus("Below target - opening damper");
                     }
+                } else  if (!inBurnLoop) {
+                    // Inside the band: do nothing (this is the magic that stops flapping)
+                    setStatus("not in burn loop");
                 } else {
                     // Inside the band: do nothing (this is the magic that stops flapping)
                     setStatus("Holding steady near target");
                 }
 
-                // If it cools way down, exit burn loop (your old logic did this at 190)
-                if (raw < 190 && burningNow) {
-                    setInBurnLoop(false);
-                }
+
 
                 lastTemp = raw;
                 lastTs = now;
