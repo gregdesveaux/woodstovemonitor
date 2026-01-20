@@ -59,6 +59,13 @@ public class MonitorStove {
     private static final int FIRE_OUT_OPEN_THRESHOLD = 2000;
     private static final double COOLING_SLOPE_C_PER_MIN = -0.3; // tune: -0.2 to -1.0
     private static final int COAL_PRESERVE_POSITION = 0;        // or 200–400 if you want a tiny crack
+    private static final int MIN_STEP = 80;
+    private static final int MAX_STEP = 250;
+    private static final long ADJUSTMENT_COOLDOWN_MS = 120_000;
+    private static final int REVERSAL_ERROR_C = 20;
+
+    private int lastAdjustmentDirection = 0;
+    private long lastAdjustmentTs = 0L;
 
 
     public static void main(String[] args) {
@@ -296,33 +303,35 @@ public class MonitorStove {
                 int error = (int) Math.round(temp) - target;
 
                 if (temp > high) {
-                    if(!inBurnLoop){
-                        int newPos=3000;
-                        int delta = damperPosition - newPos;
-                        stepperMotor.moveDamper(delta, DIRECTION_CLOSE);
-                        damperPosition=newPos;
-
+                    if (!inBurnLoop) {
+                        setInBurnLoop(true);
                     }
                     // Too hot -> close proportionally
                     int steps = computeStepsClose(error);
                     int newPos = Math.max(minOpen, damperPosition - steps);
                     int delta = damperPosition - newPos;
-                    if (delta > 0) {
+                    if (delta > 0 && canAdjust(-1, error, now)) {
                         stepperMotor.moveDamper(delta, DIRECTION_CLOSE);
                         setDamperPosition(newPos);
                         setInBurnLoop(true);
+                        markAdjustment(-1, now);
                         setStatus("Above target - closing damper");
+                    } else if (delta > 0) {
+                        setStatus("Holding to avoid oscillation");
                     }
                 } else if (temp < low && inBurnLoop) {
                     // Too cool -> open proportionally (but don't exceed fully open)
                     int steps = computeStepsOpen(-error);
                     int newPos = Math.min(DAMPER_FULLY_OPEN, damperPosition + steps);
                     int delta = newPos - damperPosition;
-                    if (delta > 0) {
+                    if (delta > 0 && canAdjust(1, -error, now)) {
                         stepperMotor.moveDamper(delta, DIRECTION_OPEN);
                         setDamperPosition(newPos);
                         setInBurnLoop(true);
+                        markAdjustment(1, now);
                         setStatus("Below target - opening damper");
+                    } else if (delta > 0) {
+                        setStatus("Holding to avoid oscillation");
                     }
                 } else  if (!inBurnLoop) {
                     // Inside the band: do nothing (this is the magic that stops flapping)
@@ -347,18 +356,33 @@ public class MonitorStove {
 
     private static int computeStepsClose(int errorC) {
         // errorC is how many °C above target you are (positive)
-        if (errorC >= 40) return 600;
-        if (errorC >= 25) return 400;
-        if (errorC >= 12) return 250;
-        return 150;
+        int steps = (int) Math.round(errorC * 8.0);
+        return clampSteps(steps);
     }
 
     private static int computeStepsOpen(int belowC) {
         // belowC is how many °C below target you are (positive)
-        if (belowC >= 40) return 600;
-        if (belowC >= 25) return 400;
-        if (belowC >= 12) return 250;
-        return 150;
+        int steps = (int) Math.round(belowC * 8.0);
+        return clampSteps(steps);
+    }
+
+    private static int clampSteps(int steps) {
+        return Math.max(MIN_STEP, Math.min(MAX_STEP, steps));
+    }
+
+    private boolean canAdjust(int direction, int errorC, long now) {
+        if (lastAdjustmentDirection == 0 || lastAdjustmentDirection == direction) {
+            return true;
+        }
+        if (now - lastAdjustmentTs >= ADJUSTMENT_COOLDOWN_MS) {
+            return true;
+        }
+        return errorC >= REVERSAL_ERROR_C;
+    }
+
+    private void markAdjustment(int direction, long now) {
+        lastAdjustmentDirection = direction;
+        lastAdjustmentTs = now;
     }
 
     private static void sleepQuietly(long ms) {
