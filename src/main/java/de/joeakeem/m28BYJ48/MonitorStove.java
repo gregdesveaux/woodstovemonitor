@@ -242,7 +242,7 @@ public class MonitorStove {
 
                 // --- SAFETY OVERRIDE (too hot) ---
                 if (raw >= OVERHEAT_C) {
-                    int steps = Math.min(0, damperPosition); // close hard, but bounded
+                    int steps= damperPosition; // close hard, but bounded
                     if (steps > 0) {
                         stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
                         setDamperPosition(damperPosition - steps);
@@ -264,7 +264,7 @@ public class MonitorStove {
 
                     // Close in chunks so you don't hammer the mechanism.
                     int delta = damperPosition - targetPos;
-                    int steps = Math.min(800, delta); // "close hard" but bounded per cycle
+                    int steps = delta; // "close hard" but bounded per cycle
 
                     if (steps > 0) {
                         stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
@@ -300,7 +300,7 @@ public class MonitorStove {
                         int newPos=3000;
                         int delta = damperPosition - newPos;
                         stepperMotor.moveDamper(delta, DIRECTION_CLOSE);
-                        setDamperPosition(newPos);
+                        damperPosition=newPos;
 
                     }
                     // Too hot -> close proportionally
