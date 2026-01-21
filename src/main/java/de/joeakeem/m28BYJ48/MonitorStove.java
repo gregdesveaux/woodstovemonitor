@@ -161,9 +161,7 @@ public class MonitorStove {
     private void setInBurnLoop(boolean inBurnLoop) {
         this.inBurnLoop = inBurnLoop;
         persistDamperState();
-        if (inBurnLoop) {
-            fireout = false;
-        }
+
     }
 
     private int clampDamperPosition(int position) {
@@ -205,6 +203,7 @@ public class MonitorStove {
 
     void resetBurn() {
         setInBurnLoop(false);
+        fireout = false;
         logger.info("Moving damper to open");
         stepperMotor.moveDamper(DAMPER_FULLY_OPEN - damperPosition, DIRECTION_OPEN);
         setDamperPosition(DAMPER_FULLY_OPEN);
