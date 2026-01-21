@@ -4,9 +4,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import static spark.Spark.*;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+
 public class WebInterface {
 
     private static final Logger logger = LoggerFactory.getLogger(WebInterface.class);
+    private static final Path LOG_FILE = Path.of("/home/gdesveau/logs/application.log");
+    private static final int LOG_TAIL_LINES = 80;
     private int temperature = 0;
     private int damper = 0;
     private int startHighTemp = 0;
@@ -65,6 +73,23 @@ public class WebInterface {
                     ".restart-button:hover {" +
                     "  background-color: #d32f2f;" +
                     "}" +
+                    "#log-container {" +
+                    "  width: 90%;" +
+                    "  max-width: 900px;" +
+                    "  margin-top: 40px;" +
+                    "}" +
+                    "#log-container h2 {" +
+                    "  margin: 0 0 10px 0;" +
+                    "}" +
+                    "#log-output {" +
+                    "  background-color: #111;" +
+                    "  color: #e0e0e0;" +
+                    "  padding: 15px;" +
+                    "  border-radius: 6px;" +
+                    "  font-size: 14px;" +
+                    "  overflow-x: auto;" +
+                    "  white-space: pre-wrap;" +
+                    "}" +
                     "</style>" +
                     "</head>" +
                     "<body>" +
@@ -96,6 +121,10 @@ public class WebInterface {
                     "<form action='/restart' method='post'>" +
                     "<button type='submit' class='restart-button'>Restart App</button>" +
                     "</form>" +
+                    "<div id='log-container'>" +
+                    "<h2>Log Output</h2>" +
+                    "<pre id='log-output'>" + readLogTail() + "</pre>" +
+                    "</div>" +
                     "</body>" +
                     "</html>";
             res.type("text/html");
@@ -162,6 +191,36 @@ public class WebInterface {
         startHighTemp = parent.getHighTemp();
         status = parent.getStatus();
         logger.info("Got Temp: {}", temperature);
+    }
+
+    private String readLogTail() {
+        if (!Files.exists(LOG_FILE)) {
+            return "Log file not found: " + escapeHtml(LOG_FILE.toString());
+        }
+        try {
+            List<String> lines = Files.readAllLines(LOG_FILE, StandardCharsets.UTF_8);
+            int startIndex = Math.max(0, lines.size() - LOG_TAIL_LINES);
+            StringBuilder builder = new StringBuilder();
+            for (int i = startIndex; i < lines.size(); i++) {
+                builder.append(lines.get(i));
+                if (i < lines.size() - 1) {
+                    builder.append('\n');
+                }
+            }
+            return escapeHtml(builder.toString());
+        } catch (IOException e) {
+            logger.warn("Unable to read log file from {}", LOG_FILE, e);
+            return "Unable to read log file.";
+        }
+    }
+
+    private String escapeHtml(String text) {
+        return text
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
     }
 
 }
