@@ -46,6 +46,7 @@ public class MonitorStove {
     private boolean inBurnLoop = false;
     private boolean fanOn = false;
     private String status = "Monitoring";
+    private boolean fireout = true;
 
     // Hysteresis band: no movement while inside [TARGET - BAND, TARGET + BAND]
     private static final int BAND_C = 5;
@@ -160,6 +161,9 @@ public class MonitorStove {
     private void setInBurnLoop(boolean inBurnLoop) {
         this.inBurnLoop = inBurnLoop;
         persistDamperState();
+        if (inBurnLoop) {
+            fireout = false;
+        }
     }
 
     private int clampDamperPosition(int position) {
@@ -282,6 +286,7 @@ public class MonitorStove {
 
                     // This is not "burning" anymore.
                     setInBurnLoop(false);
+                    fireout = true;
 
                     sleepQuietly(30_000);
                     lastTemp = raw;
@@ -342,7 +347,11 @@ public class MonitorStove {
                     }
                 } else if (!inBurnLoop) {
                     // Inside the band: do nothing (this is the magic that stops flapping)
-                    setStatus("not in burn loop");
+                    if (fireout) {
+                        setStatus("Fire is out, damper is closed to preserve coals");
+                    } else {
+                        setStatus("not in burn loop");
+                    }
                 } else {
                     // Inside the band: do nothing (this is the magic that stops flapping)
                     setStatus("Holding steady near target");
