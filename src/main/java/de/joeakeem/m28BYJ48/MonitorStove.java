@@ -249,7 +249,7 @@ public class MonitorStove {
 
                 // --- SAFETY OVERRIDE (too hot) ---
                 if (raw >= OVERHEAT_C) {
-                    int steps= damperPosition; // close hard, but bounded
+                    int steps = damperPosition; // close hard, but bounded
                     if (steps > 0) {
                         stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
                         setDamperPosition(damperPosition - steps);
@@ -265,7 +265,8 @@ public class MonitorStove {
 // If we're wide open and cooling and below 180C, close to preserve coals.
                 if (damperPosition > FIRE_OUT_OPEN_THRESHOLD
                         && raw <= FIRE_OUT_TEMP_C
-                        && dTdt <= COOLING_SLOPE_C_PER_MIN) {
+                        && dTdt <= COOLING_SLOPE_C_PER_MIN
+                        && inBurnLoop) {
 
                     int targetPos = COAL_PRESERVE_POSITION;
 
@@ -301,10 +302,16 @@ public class MonitorStove {
                 }
 
                 int error = (int) Math.round(temp) - target;
-
+                logger.info("temp={} (raw={}), target={}, error={}, slope={:.2f}, high={}, low={}, inBurnLoop={}",
+                        Math.round(temp), raw, target, error, dTdt, high, low, inBurnLoop);
                 if (temp > high) {
+                    // Usable area of damper is 3000 and below when burning
                     if (!inBurnLoop) {
-                        setInBurnLoop(true);
+                        int newPos = 3000;
+                        int delta = damperPosition - newPos;
+                        stepperMotor.moveDamper(delta, DIRECTION_CLOSE);
+                        setDamperPosition(newPos);
+
                     }
                     // Too hot -> close proportionally
                     int steps = computeStepsClose(error);
@@ -333,14 +340,13 @@ public class MonitorStove {
                     } else if (delta > 0) {
                         setStatus("Holding to avoid oscillation");
                     }
-                } else  if (!inBurnLoop) {
+                } else if (!inBurnLoop) {
                     // Inside the band: do nothing (this is the magic that stops flapping)
                     setStatus("not in burn loop");
                 } else {
                     // Inside the band: do nothing (this is the magic that stops flapping)
                     setStatus("Holding steady near target");
                 }
-
 
 
                 lastTemp = raw;
