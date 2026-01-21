@@ -23,7 +23,7 @@ import java.util.Date;
  */
 public class MonitorStove {
     private static final Logger logger = LoggerFactory.getLogger(MonitorStove.class);
-    private static final int DAMPER_FULLY_OPEN = 7000;
+    private static final int DAMPER_FULLY_OPEN = 3000;
     private static final int DIRECTION_CLOSE = 1;
     private static final int DIRECTION_OPEN = 0;
     private static final int START_HIGH_TEMP = 200;
@@ -259,7 +259,7 @@ public class MonitorStove {
                         setStatus("OVERHEAT - closing damper");
                     }
                     setInBurnLoop(true);
-                    sleepQuietly(30_000);
+                    sleepQuietly(130_000);
                     lastTemp = raw;
                     lastTs = now;
                     continue;
@@ -287,7 +287,7 @@ public class MonitorStove {
                     setInBurnLoop(false);
                     fireout = true;
 
-                    sleepQuietly(30_000);
+                    sleepQuietly(120_000);
                     lastTemp = raw;
                     lastTs = now;
                     continue;
@@ -309,14 +309,7 @@ public class MonitorStove {
                 logger.info("temp={} (raw={}), target={}, error={}, slope={:.2f}, high={}, low={}, inBurnLoop={}",
                         Math.round(temp), raw, target, error, dTdt, high, low, inBurnLoop);
                 if (temp > high) {
-                    // Usable area of damper is 3000 and below when burning
-                    if (!inBurnLoop) {
-                        int newPos = 3000;
-                        int delta = damperPosition - newPos;
-                        stepperMotor.moveDamper(delta, DIRECTION_CLOSE);
-                        setDamperPosition(newPos);
 
-                    }
                     // Too hot -> close proportionally
                     int steps = computeStepsClose(error);
                     int newPos = Math.max(minOpen, damperPosition - steps);
