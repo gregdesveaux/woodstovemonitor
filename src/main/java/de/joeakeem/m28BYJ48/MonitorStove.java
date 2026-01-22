@@ -212,7 +212,7 @@ public class MonitorStove {
 
     void openDamper() {
         int steps = 300;
-        if (damperPosition < 6700) {
+        if (damperPosition < DAMPER_FULLY_OPEN-steps) {
             stepperMotor.moveDamper(steps, DIRECTION_OPEN);
             setDamperPosition(damperPosition + steps);
             logger.info("moving damper to: {}", damperPosition);
