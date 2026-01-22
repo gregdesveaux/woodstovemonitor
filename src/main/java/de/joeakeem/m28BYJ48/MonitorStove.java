@@ -352,7 +352,7 @@ public class MonitorStove {
 
                 lastTemp = raw;
                 lastTs = now;
-                long sleepMs = dTdt > 0 ? 45_000 : 120_000;
+                long sleepMs = dTdt > 0 ? 30_000 : 120_000;
                 sleepQuietly(sleepMs);
             }
         });
