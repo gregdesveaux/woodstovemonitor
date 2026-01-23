@@ -104,6 +104,9 @@ public class WebInterface {
                     "<form action='/reset' method='post'>" +
                     "<button type='submit'>Reset burn</button>" +
                     "</form>" +
+                    "<form action='/calibrate' method='post'>" +
+                    "<button type='submit'>Calibrate</button>" +
+                    "</form>" +
                     "<p id='counter'>*****************************************</p>" +
                     "<form action='/setHighTemp' method='post'>" +
                     "<label for='highTemp'>Start High Temp: </label>" +
@@ -156,6 +159,11 @@ public class WebInterface {
 
         post("/reset", (req, res) -> {
             parent.resetBurn();
+            res.redirect("/");
+            return null;
+        });
+        post("/calibrate", (req, res) -> {
+            parent.calibrateDamper();
             res.redirect("/");
             return null;
         });
