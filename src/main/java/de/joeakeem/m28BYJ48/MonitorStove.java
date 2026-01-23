@@ -231,6 +231,16 @@ public class MonitorStove {
         setStatus("Damper closed manually");
     }
 
+    void calibrateDamper() {
+        logger.info("Calibrating damper position");
+        if (damperPosition > 0) {
+            stepperMotor.moveDamper(damperPosition, DIRECTION_CLOSE);
+        }
+        stepperMotor.moveDamper(100, DIRECTION_CLOSE);
+        setDamperPosition(0);
+        setStatus("Damper calibrated");
+    }
+
     void controlThread() {
         Thread t = new Thread(() -> {
             Ewma tempFilter = new Ewma(0.25);     // tune 0.15–0.35
