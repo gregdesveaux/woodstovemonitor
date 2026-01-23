@@ -198,7 +198,7 @@ public class WebInterface {
         damper = parent.getDamperPosition();
         startHighTemp = parent.getHighTemp();
         status = parent.getStatus();
-        logger.info("Got Temp: {}", temperature);
+        logger.debug("Got Temp: {}", temperature);
     }
 
     private String readLogTail() {

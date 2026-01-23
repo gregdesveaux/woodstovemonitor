@@ -119,7 +119,7 @@ public class MonitorStove {
 
         temp = temperature.getTemp();
         status = inBurnLoop ? "IN BURN LOOP" : "NOT IN BURN LOOP";
-        logger.info("Temp: {}", temp);
+
         //logger.info("Moving damper to open");
         //stepperMotor.moveDamper(damperPosition, DIRECTION_OPEN);
         controlThread();
