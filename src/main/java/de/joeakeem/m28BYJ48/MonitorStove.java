@@ -52,7 +52,7 @@ public class MonitorStove {
     private static final int BAND_C = 5;
 
     // Keep some air while burning to avoid smolder/smoke (tune this for your stove)
-    private static final int MIN_BURN_OPEN = 0;  // try 600–1200
+    private static final int MIN_BURN_OPEN = 200;  // try 600–1200
 
     // Safety: if truly too hot, you can go below MIN_BURN_OPEN
     private static final int OVERHEAT_C = 270;
@@ -69,6 +69,7 @@ public class MonitorStove {
 
     private int lastAdjustmentDirection = 0;
     private long lastAdjustmentTs = 0L;
+    private boolean overheatRecoveryNeeded = false;
 
 
     public static void main(String[] args) {
@@ -261,10 +262,21 @@ public class MonitorStove {
                         setStatus("OVERHEAT - closing damper");
                     }
                     setInBurnLoop(true);
+                    overheatRecoveryNeeded = true;
                     sleepQuietly(130_000);
                     lastTemp = raw;
                     lastTs = now;
                     continue;
+                }
+                if (overheatRecoveryNeeded && raw <= OVERHEAT_C - 20) {
+                    int targetPos = MIN_BURN_OPEN;
+                    int delta = targetPos - damperPosition;
+                    if (delta > 0) {
+                        stepperMotor.moveDamper(delta, DIRECTION_OPEN);
+                        setDamperPosition(damperPosition + delta);
+                        setStatus("Recovered from overheat - opening damper to minimum burn");
+                    }
+                    overheatRecoveryNeeded = false;
                 }
 // --- COAL PRESERVE OVERRIDE (fire is out) ---
 // If we're wide open and cooling and below 180C, close to preserve coals.
