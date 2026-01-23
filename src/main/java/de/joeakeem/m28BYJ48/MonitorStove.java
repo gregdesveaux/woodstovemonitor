@@ -56,6 +56,8 @@ public class MonitorStove {
 
     // Safety: if truly too hot, you can go below MIN_BURN_OPEN
     private static final int OVERHEAT_C = 270;
+    private static final int APPROACH_HIGH_C = 8;
+    private static final double APPROACH_SLOPE_C_PER_MIN = 0.2;
     private static final int FIRE_OUT_TEMP_C = 180;
     private static final int FIRE_OUT_OPEN_THRESHOLD = 2000;
     private static final double COOLING_SLOPE_C_PER_MIN = -0.3; // tune: -0.2 to -1.0
@@ -308,6 +310,13 @@ public class MonitorStove {
                 int error = (int) Math.round(temp) - target;
                 logger.info("temp={} (raw={}), target={}, error={}, slope={:.2f}, high={}, low={}, inBurnLoop={}",
                         Math.round(temp), raw, target, error, dTdt, high, low, inBurnLoop);
+                boolean risingTowardHigh = dTdt >= APPROACH_SLOPE_C_PER_MIN
+                        && temp >= (target - APPROACH_HIGH_C)
+                        && temp <= high;
+                boolean fallingTowardHigh = dTdt <= -APPROACH_SLOPE_C_PER_MIN
+                        && temp <= (target + APPROACH_HIGH_C)
+                        && temp >= low;
+
                 if (temp > high) {
 
                     // Too hot -> close proportionally
@@ -320,6 +329,34 @@ public class MonitorStove {
                         setInBurnLoop(true);
                         markAdjustment(-1, now);
                         setStatus("Above target - closing damper");
+                    } else if (delta > 0) {
+                        setStatus("Holding to avoid oscillation");
+                    }
+                } else if (risingTowardHigh) {
+                    int approachError = (int) Math.round(temp) - (target - APPROACH_HIGH_C);
+                    int steps = computeStepsClose(Math.max(0, approachError));
+                    int newPos = Math.max(minOpen, damperPosition - steps);
+                    int delta = damperPosition - newPos;
+                    if (delta > 0 && canAdjust(-1, approachError, now)) {
+                        stepperMotor.moveDamper(delta, DIRECTION_CLOSE);
+                        setDamperPosition(newPos);
+                        setInBurnLoop(true);
+                        markAdjustment(-1, now);
+                        setStatus("Approaching target - closing damper");
+                    } else if (delta > 0) {
+                        setStatus("Holding to avoid oscillation");
+                    }
+                } else if (fallingTowardHigh && inBurnLoop) {
+                    int approachError = (target + APPROACH_HIGH_C) - (int) Math.round(temp);
+                    int steps = computeStepsOpen(Math.max(0, approachError));
+                    int newPos = Math.min(DAMPER_FULLY_OPEN, damperPosition + steps);
+                    int delta = newPos - damperPosition;
+                    if (delta > 0 && canAdjust(1, approachError, now)) {
+                        stepperMotor.moveDamper(delta, DIRECTION_OPEN);
+                        setDamperPosition(newPos);
+                        setInBurnLoop(true);
+                        markAdjustment(1, now);
+                        setStatus("Cooling near target - opening damper");
                     } else if (delta > 0) {
                         setStatus("Holding to avoid oscillation");
                     }
