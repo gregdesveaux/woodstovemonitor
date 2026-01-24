@@ -104,9 +104,6 @@ public class WebInterface {
                     "<form action='/reset' method='post'>" +
                     "<button type='submit'>Reset burn</button>" +
                     "</form>" +
-                    "<form action='/calibrate' method='post'>" +
-                    "<button type='submit'>Calibrate</button>" +
-                    "</form>" +
                     "<p id='counter'>*****************************************</p>" +
                     "<form action='/setHighTemp' method='post'>" +
                     "<label for='highTemp'>Start High Temp: </label>" +
@@ -123,6 +120,9 @@ public class WebInterface {
                     "</form>" +
                     "<form action='/restart' method='post'>" +
                     "<button type='submit' class='restart-button'>Restart App</button>" +
+                    "</form>" +
+                    "<form action='/calibrate' method='post'>" +
+                    "<button type='submit'>Calibrate</button>" +
                     "</form>" +
                     "<div id='log-container'>" +
                     "<h2>Log Output</h2>" +
