@@ -252,6 +252,14 @@ public class MonitorStove {
             while (true) {
                 int raw = temperature.getTemp();
                 long now = System.currentTimeMillis();
+                int roomTemp = temperature.getRoomTemp();
+                if (roomTemp > 50 && !fanOn) {
+                    memo.setOn();
+                    fanOn = true;
+                } else if (roomTemp < 50 && roomTemp > 0 && fanOn) {
+                    memo.setOff();
+                    fanOn = false;
+                }
 
                 double dtMin = Math.max(0.25, (now - lastTs) / 60000.0); // minutes
                 double slope = (raw - lastTemp) / dtMin;                // °C per minute
