@@ -49,21 +49,24 @@ public class MonitorStove {
     private boolean fireout = true;
 
     // Hysteresis band: no movement while inside [TARGET - BAND, TARGET + BAND]
-    private static final int BAND_C = 5;
+    private static final int BAND_C = 3;
 
     // Keep some air while burning to avoid smolder/smoke (tune this for your stove)
     private static final int MIN_BURN_OPEN = 1200;  // try 600–1200
 
     // Safety: if truly too hot, you can go below MIN_BURN_OPEN
     private static final int OVERHEAT_C = 280;
-    private static final int APPROACH_HIGH_C = 15;
-    private static final double APPROACH_SLOPE_C_PER_MIN = 0.2;
+    private static final int APPROACH_HIGH_C = 20;
+    private static final double APPROACH_SLOPE_C_PER_MIN = 0.15;
     private static final int FIRE_OUT_TEMP_C = 140;
     private static final int FIRE_OUT_OPEN_THRESHOLD = 3000;
     private static final double COOLING_SLOPE_C_PER_MIN = -0.3; // tune: -0.2 to -1.0
     private static final int COAL_PRESERVE_POSITION = 0;        // or 200–400 if you want a tiny crack
     private static final int MIN_STEP = 300;
     private static final int MAX_STEP = 600;
+    private static final int MIN_STEP_NEAR = 150;
+    private static final int MAX_STEP_NEAR = 450;
+    private static final int NEAR_TARGET_ERROR_C = 10;
     private static final long ADJUSTMENT_COOLDOWN_MS = 120_000;
     private static final int REVERSAL_ERROR_C = 20;
 
@@ -432,17 +435,19 @@ public class MonitorStove {
     private static int computeStepsClose(int errorC) {
         // errorC is how many °C above target you are (positive)
         int steps = (int) Math.round(errorC * 8.0);
-        return clampSteps(steps);
+        return clampSteps(steps, errorC);
     }
 
     private static int computeStepsOpen(int belowC) {
         // belowC is how many °C below target you are (positive)
         int steps = (int) Math.round(belowC * 8.0);
-        return clampSteps(steps);
+        return clampSteps(steps, belowC);
     }
 
-    private static int clampSteps(int steps) {
-        return Math.max(MIN_STEP, Math.min(MAX_STEP, steps));
+    private static int clampSteps(int steps, int errorC) {
+        int minStep = errorC <= NEAR_TARGET_ERROR_C ? MIN_STEP_NEAR : MIN_STEP;
+        int maxStep = errorC <= NEAR_TARGET_ERROR_C ? MAX_STEP_NEAR : MAX_STEP;
+        return Math.max(minStep, Math.min(maxStep, steps));
     }
 
     private boolean canAdjust(int direction, int errorC, long now) {
