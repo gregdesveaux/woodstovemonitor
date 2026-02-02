@@ -23,10 +23,10 @@ import java.util.Date;
  */
 public class MonitorStove {
     private static final Logger logger = LoggerFactory.getLogger(MonitorStove.class);
-    private static final int DAMPER_FULLY_OPEN = 3000;
+    private static final int DAMPER_FULLY_OPEN = 6000;
     private static final int DIRECTION_CLOSE = 1;
     private static final int DIRECTION_OPEN = 0;
-    private static final int START_HIGH_TEMP = 200;
+    private static final int START_HIGH_TEMP = 240;
     private static final Path DAMPER_POSITION_FILE = Path.of(
             System.getProperty("user.home"),
             "damper_position.txt"
@@ -52,18 +52,18 @@ public class MonitorStove {
     private static final int BAND_C = 5;
 
     // Keep some air while burning to avoid smolder/smoke (tune this for your stove)
-    private static final int MIN_BURN_OPEN = 200;  // try 600–1200
+    private static final int MIN_BURN_OPEN = 1200;  // try 600–1200
 
     // Safety: if truly too hot, you can go below MIN_BURN_OPEN
-    private static final int OVERHEAT_C = 270;
-    private static final int APPROACH_HIGH_C = 8;
+    private static final int OVERHEAT_C = 280;
+    private static final int APPROACH_HIGH_C = 15;
     private static final double APPROACH_SLOPE_C_PER_MIN = 0.2;
-    private static final int FIRE_OUT_TEMP_C = 180;
-    private static final int FIRE_OUT_OPEN_THRESHOLD = 2000;
+    private static final int FIRE_OUT_TEMP_C = 140;
+    private static final int FIRE_OUT_OPEN_THRESHOLD = 3000;
     private static final double COOLING_SLOPE_C_PER_MIN = -0.3; // tune: -0.2 to -1.0
     private static final int COAL_PRESERVE_POSITION = 0;        // or 200–400 if you want a tiny crack
-    private static final int MIN_STEP = 80;
-    private static final int MAX_STEP = 250;
+    private static final int MIN_STEP = 300;
+    private static final int MAX_STEP = 600;
     private static final long ADJUSTMENT_COOLDOWN_MS = 120_000;
     private static final int REVERSAL_ERROR_C = 20;
 
