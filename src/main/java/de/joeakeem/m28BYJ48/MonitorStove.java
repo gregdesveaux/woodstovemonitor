@@ -60,6 +60,8 @@ public class MonitorStove {
     private static final double APPROACH_SLOPE_C_PER_MIN = 0.15;
     private static final int FIRE_OUT_TEMP_C = 140;
     private static final int FIRE_OUT_OPEN_THRESHOLD = 3000;
+    private static final int NOT_IN_BURN_LOOP_OPEN_THRESHOLD = 200;
+    private static final int NOT_IN_BURN_LOOP_TARGET_POSITION = 3000;
     private static final double COOLING_SLOPE_C_PER_MIN = -0.3; // tune: -0.2 to -1.0
     private static final int COAL_PRESERVE_POSITION = 0;        // or 200–400 if you want a tiny crack
     private static final int MIN_STEP = 300;
@@ -298,6 +300,20 @@ public class MonitorStove {
                         setStatus("Recovered from overheat - opening damper to minimum burn");
                     }
                     overheatRecoveryNeeded = false;
+                }
+                if (!inBurnLoop && raw > NOT_IN_BURN_LOOP_OPEN_THRESHOLD) {
+                    int targetPos = NOT_IN_BURN_LOOP_TARGET_POSITION;
+                    int delta = targetPos - damperPosition;
+                    if (delta != 0) {
+                        int direction = delta > 0 ? DIRECTION_OPEN : DIRECTION_CLOSE;
+                        stepperMotor.moveDamper(Math.abs(delta), direction);
+                        setDamperPosition(targetPos);
+                        setStatus("Temp above 200 while not in burn loop - setting damper to 3000");
+                    }
+                    lastTemp = raw;
+                    lastTs = now;
+                    sleepQuietly(30_000);
+                    continue;
                 }
 // --- COAL PRESERVE OVERRIDE (fire is out) ---
 // If we're wide open and cooling and below 180C, close to preserve coals.
