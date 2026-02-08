@@ -212,6 +212,12 @@ public class MonitorStove {
     void resetBurn() {
         setInBurnLoop(false);
         fireout = false;
+        logger.info(
+                "Reset burn requested (damperPosition={}, inBurnLoop={}, temp={})",
+                damperPosition,
+                inBurnLoop,
+                temperature.getTemp()
+        );
         logger.info("Moving damper to open");
         stepperMotor.moveDamper(DAMPER_FULLY_OPEN - damperPosition, DIRECTION_OPEN);
         setDamperPosition(DAMPER_FULLY_OPEN);
@@ -255,194 +261,201 @@ public class MonitorStove {
             long lastTs = System.currentTimeMillis();
 
             while (true) {
-                int raw = temperature.getTemp();
-                if (raw == -273) {
-                    raw = lastTemp;
-                } // handle sensor read failure by treating as no change
-                long now = System.currentTimeMillis();
-                int roomTemp = temperature.getRoomTemp();
-                if (roomTemp > 50 && !fanOn) {
-                    memo.setOn();
-                    fanOn = true;
-                } else if (roomTemp < 50 && roomTemp > 0 && fanOn) {
-                    memo.setOff();
-                    fanOn = false;
-                }
-
-                double dtMin = Math.max(0.25, (now - lastTs) / 60000.0); // minutes
-                double slope = (raw - lastTemp) / dtMin;                // °C per minute
-
-                double temp = tempFilter.update(raw);
-                double dTdt = slopeFilter.update(slope);
-
-                // Decide whether we're “burning” (so MIN_BURN_OPEN applies)
-                // This is intentionally simple + stable.
-                boolean burningNow = inBurnLoop || temp >= 205;
-
-                // --- SAFETY OVERRIDE (too hot) ---
-                if (raw >= OVERHEAT_C) {
-                    int steps = damperPosition; // close hard, but bounded
-                    if (steps > 0) {
-                        stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
-                        setDamperPosition(damperPosition - steps);
-                        setStatus("OVERHEAT - closing damper");
-                    }
-                    setInBurnLoop(true);
-                    overheatRecoveryNeeded = true;
-                    sleepQuietly(130_000);
-                    lastTemp = raw;
-                    lastTs = now;
-                    continue;
-                }
-                if (overheatRecoveryNeeded && raw <= OVERHEAT_C - 20) {
-                    int targetPos = MIN_BURN_OPEN;
-                    int delta = targetPos - damperPosition;
-                    if (delta > 0) {
-                        stepperMotor.moveDamper(delta, DIRECTION_OPEN);
-                        setDamperPosition(damperPosition + delta);
-                        setStatus("Recovered from overheat - opening damper to minimum burn");
-                    }
-                    overheatRecoveryNeeded = false;
-                }
-                if (!inBurnLoop && raw > NOT_IN_BURN_LOOP_OPEN_THRESHOLD) {
-                    int targetPos = NOT_IN_BURN_LOOP_TARGET_POSITION;
-                    int delta = targetPos - damperPosition;
-                    if (delta != 0) {
-                        int direction = delta > 0 ? DIRECTION_OPEN : DIRECTION_CLOSE;
-                        stepperMotor.moveDamper(Math.abs(delta), direction);
-                        setDamperPosition(targetPos);
-                        setStatus("Temp above 200 while not in burn loop - setting damper to 3000");
-                    }
-                    lastTemp = raw;
-                    lastTs = now;
-                    sleepQuietly(30_000);
-                    continue;
-                }
-// --- COAL PRESERVE OVERRIDE (fire is out) ---
-// If we're wide open and cooling and below 180C, close to preserve coals.
-                if (damperPosition > FIRE_OUT_OPEN_THRESHOLD
-                        && raw <= FIRE_OUT_TEMP_C
-                        && dTdt <= COOLING_SLOPE_C_PER_MIN
-                        && inBurnLoop) {
-
-                    int targetPos = COAL_PRESERVE_POSITION;
-
-                    // Close in chunks so you don't hammer the mechanism.
-                    int delta = damperPosition - targetPos;
-                    int steps = delta; // "close hard" but bounded per cycle
-
-                    if (steps > 0) {
-                        stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
-                        setDamperPosition(damperPosition - steps);
-                        setStatus("Fire out - closing damper to preserve coals");
+                try {
+                    int raw = temperature.getTemp();
+                    if (raw == -273) {
+                        raw = lastTemp;
+                    } // handle sensor read failure by treating as no change
+                    long now = System.currentTimeMillis();
+                    int roomTemp = temperature.getRoomTemp();
+                    if (roomTemp > 50 && !fanOn) {
+                        memo.setOn();
+                        fanOn = true;
+                    } else if (roomTemp < 50 && roomTemp > 0 && fanOn) {
+                        memo.setOff();
+                        fanOn = false;
                     }
 
-                    // This is not "burning" anymore.
-                    setInBurnLoop(false);
-                    fireout = true;
+                    double dtMin = Math.max(0.25, (now - lastTs) / 60000.0); // minutes
+                    double slope = (raw - lastTemp) / dtMin;                // °C per minute
 
-                    sleepQuietly(120_000);
-                    lastTemp = raw;
-                    lastTs = now;
-                    continue;
-                }
-                // Target can still be adjustable from UI if you want:
-                int target = highTemp; // set highTemp to 220 from UI, or just use TARGET_TEMP_C
-                int low = target - BAND_C;
-                int high = target + BAND_C;
+                    double temp = tempFilter.update(raw);
+                    double dTdt = slopeFilter.update(slope);
 
-                int minOpen = burningNow ? MIN_BURN_OPEN : 0;
+                    // Decide whether we're “burning” (so MIN_BURN_OPEN applies)
+                    // This is intentionally simple + stable.
+                    boolean burningNow = inBurnLoop || temp >= 205;
 
-                // Predictive nudge: if rising fast, start closing a bit early
-                // (prevents overshoot)
-                if (dTdt > 3.0) { // >3°C/min is a “getting spicy” slope for many stoves
-                    high -= 2;
-                }
-
-                int error = (int) Math.round(temp) - target;
-                logger.info("temp={} (raw={}), target={}, error={}, slope={:.2f}, high={}, low={}, inBurnLoop={}",
-                        Math.round(temp), raw, target, error, dTdt, high, low, inBurnLoop);
-                boolean risingTowardHigh = dTdt >= APPROACH_SLOPE_C_PER_MIN
-                        && temp >= (target - APPROACH_HIGH_C)
-                        && temp <= high;
-                boolean fallingTowardHigh = dTdt <= -APPROACH_SLOPE_C_PER_MIN
-                        && temp <= (target + APPROACH_HIGH_C)
-                        && temp >= low;
-
-                if (temp > high) {
-
-                    // Too hot -> close proportionally
-                    int steps = computeStepsClose(error);
-                    int newPos = Math.max(minOpen, damperPosition - steps);
-                    int delta = damperPosition - newPos;
-                    if (delta > 0 && canAdjust(-1, error, now)) {
-                        stepperMotor.moveDamper(delta, DIRECTION_CLOSE);
-                        setDamperPosition(newPos);
+                    // --- SAFETY OVERRIDE (too hot) ---
+                    if (raw >= OVERHEAT_C) {
+                        int steps = damperPosition; // close hard, but bounded
+                        if (steps > 0) {
+                            stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
+                            setDamperPosition(damperPosition - steps);
+                            setStatus("OVERHEAT - closing damper");
+                        }
                         setInBurnLoop(true);
-                        markAdjustment(-1, now);
-                        setStatus("Above target - closing damper");
-                    } else if (delta > 0) {
-                        setStatus("Holding to avoid oscillation");
+                        overheatRecoveryNeeded = true;
+                        sleepQuietly(130_000);
+                        lastTemp = raw;
+                        lastTs = now;
+                        continue;
                     }
-                } else if (risingTowardHigh) {
-                    int approachError = (int) Math.round(temp) - (target - APPROACH_HIGH_C);
-                    int steps = computeStepsClose(Math.max(0, approachError));
-                    int newPos = Math.max(minOpen, damperPosition - steps);
-                    int delta = damperPosition - newPos;
-                    if (delta > 0 && canAdjust(-1, approachError, now)) {
-                        stepperMotor.moveDamper(delta, DIRECTION_CLOSE);
-                        setDamperPosition(newPos);
-                        setInBurnLoop(true);
-                        markAdjustment(-1, now);
-                        setStatus("Approaching target - closing damper");
-                    } else if (delta > 0) {
-                        setStatus("Holding to avoid oscillation");
+                    if (overheatRecoveryNeeded && raw <= OVERHEAT_C - 20) {
+                        int targetPos = MIN_BURN_OPEN;
+                        int delta = targetPos - damperPosition;
+                        if (delta > 0) {
+                            stepperMotor.moveDamper(delta, DIRECTION_OPEN);
+                            setDamperPosition(damperPosition + delta);
+                            setStatus("Recovered from overheat - opening damper to minimum burn");
+                        }
+                        overheatRecoveryNeeded = false;
                     }
-                } else if (fallingTowardHigh && inBurnLoop) {
-                    int approachError = (target + APPROACH_HIGH_C) - (int) Math.round(temp);
-                    int steps = computeStepsOpen(Math.max(0, approachError));
-                    int newPos = Math.min(DAMPER_FULLY_OPEN, damperPosition + steps);
-                    int delta = newPos - damperPosition;
-                    if (delta > 0 && canAdjust(1, approachError, now)) {
-                        stepperMotor.moveDamper(delta, DIRECTION_OPEN);
-                        setDamperPosition(newPos);
-                        setInBurnLoop(true);
-                        markAdjustment(1, now);
-                        setStatus("Cooling near target - opening damper");
-                    } else if (delta > 0) {
-                        setStatus("Holding to avoid oscillation");
+                    if (!inBurnLoop && raw > NOT_IN_BURN_LOOP_OPEN_THRESHOLD) {
+                        int targetPos = NOT_IN_BURN_LOOP_TARGET_POSITION;
+                        int delta = targetPos - damperPosition;
+                        if (delta != 0) {
+                            int direction = delta > 0 ? DIRECTION_OPEN : DIRECTION_CLOSE;
+                            stepperMotor.moveDamper(Math.abs(delta), direction);
+                            setDamperPosition(targetPos);
+                            setStatus("Temp above 200 while not in burn loop - setting damper to 3000");
+                        }
+                        lastTemp = raw;
+                        lastTs = now;
+                        sleepQuietly(30_000);
+                        continue;
                     }
-                } else if (temp < low && inBurnLoop) {
-                    // Too cool -> open proportionally (but don't exceed fully open)
-                    int steps = computeStepsOpen(-error);
-                    int newPos = Math.min(DAMPER_FULLY_OPEN, damperPosition + steps);
-                    int delta = newPos - damperPosition;
-                    if (delta > 0 && canAdjust(1, -error, now)) {
-                        stepperMotor.moveDamper(delta, DIRECTION_OPEN);
-                        setDamperPosition(newPos);
-                        setInBurnLoop(true);
-                        markAdjustment(1, now);
-                        setStatus("Below target - opening damper");
-                    } else if (delta > 0) {
-                        setStatus("Holding to avoid oscillation");
+                    // --- COAL PRESERVE OVERRIDE (fire is out) ---
+                    // If we're wide open and cooling and below 180C, close to preserve coals.
+                    if (damperPosition > FIRE_OUT_OPEN_THRESHOLD
+                            && raw <= FIRE_OUT_TEMP_C
+                            && dTdt <= COOLING_SLOPE_C_PER_MIN
+                            && inBurnLoop) {
+
+                        int targetPos = COAL_PRESERVE_POSITION;
+
+                        // Close in chunks so you don't hammer the mechanism.
+                        int delta = damperPosition - targetPos;
+                        int steps = delta; // "close hard" but bounded per cycle
+
+                        if (steps > 0) {
+                            stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
+                            setDamperPosition(damperPosition - steps);
+                            setStatus("Fire out - closing damper to preserve coals");
+                        }
+
+                        // This is not "burning" anymore.
+                        setInBurnLoop(false);
+                        fireout = true;
+
+                        sleepQuietly(120_000);
+                        lastTemp = raw;
+                        lastTs = now;
+                        continue;
                     }
-                } else if (!inBurnLoop) {
-                    // Inside the band: do nothing (this is the magic that stops flapping)
-                    if (fireout) {
-                        setStatus("Fire is out, damper is closed to preserve coals");
+                    // Target can still be adjustable from UI if you want:
+                    int target = highTemp; // set highTemp to 220 from UI, or just use TARGET_TEMP_C
+                    int low = target - BAND_C;
+                    int high = target + BAND_C;
+
+                    int minOpen = burningNow ? MIN_BURN_OPEN : 0;
+
+                    // Predictive nudge: if rising fast, start closing a bit early
+                    // (prevents overshoot)
+                    if (dTdt > 3.0) { // >3°C/min is a “getting spicy” slope for many stoves
+                        high -= 2;
+                    }
+
+                    int error = (int) Math.round(temp) - target;
+                    logger.info("temp={} (raw={}), target={}, error={}, slope={:.2f}, high={}, low={}, inBurnLoop={}",
+                            Math.round(temp), raw, target, error, dTdt, high, low, inBurnLoop);
+                    boolean risingTowardHigh = dTdt >= APPROACH_SLOPE_C_PER_MIN
+                            && temp >= (target - APPROACH_HIGH_C)
+                            && temp <= high;
+                    boolean fallingTowardHigh = dTdt <= -APPROACH_SLOPE_C_PER_MIN
+                            && temp <= (target + APPROACH_HIGH_C)
+                            && temp >= low;
+
+                    if (temp > high) {
+
+                        // Too hot -> close proportionally
+                        int steps = computeStepsClose(error);
+                        int newPos = Math.max(minOpen, damperPosition - steps);
+                        int delta = damperPosition - newPos;
+                        if (delta > 0 && canAdjust(-1, error, now)) {
+                            stepperMotor.moveDamper(delta, DIRECTION_CLOSE);
+                            setDamperPosition(newPos);
+                            setInBurnLoop(true);
+                            markAdjustment(-1, now);
+                            setStatus("Above target - closing damper");
+                        } else if (delta > 0) {
+                            setStatus("Holding to avoid oscillation");
+                        }
+                    } else if (risingTowardHigh) {
+                        int approachError = (int) Math.round(temp) - (target - APPROACH_HIGH_C);
+                        int steps = computeStepsClose(Math.max(0, approachError));
+                        int newPos = Math.max(minOpen, damperPosition - steps);
+                        int delta = damperPosition - newPos;
+                        if (delta > 0 && canAdjust(-1, approachError, now)) {
+                            stepperMotor.moveDamper(delta, DIRECTION_CLOSE);
+                            setDamperPosition(newPos);
+                            setInBurnLoop(true);
+                            markAdjustment(-1, now);
+                            setStatus("Approaching target - closing damper");
+                        } else if (delta > 0) {
+                            setStatus("Holding to avoid oscillation");
+                        }
+                    } else if (fallingTowardHigh && inBurnLoop) {
+                        int approachError = (target + APPROACH_HIGH_C) - (int) Math.round(temp);
+                        int steps = computeStepsOpen(Math.max(0, approachError));
+                        int newPos = Math.min(DAMPER_FULLY_OPEN, damperPosition + steps);
+                        int delta = newPos - damperPosition;
+                        if (delta > 0 && canAdjust(1, approachError, now)) {
+                            stepperMotor.moveDamper(delta, DIRECTION_OPEN);
+                            setDamperPosition(newPos);
+                            setInBurnLoop(true);
+                            markAdjustment(1, now);
+                            setStatus("Cooling near target - opening damper");
+                        } else if (delta > 0) {
+                            setStatus("Holding to avoid oscillation");
+                        }
+                    } else if (temp < low && inBurnLoop) {
+                        // Too cool -> open proportionally (but don't exceed fully open)
+                        int steps = computeStepsOpen(-error);
+                        int newPos = Math.min(DAMPER_FULLY_OPEN, damperPosition + steps);
+                        int delta = newPos - damperPosition;
+                        if (delta > 0 && canAdjust(1, -error, now)) {
+                            stepperMotor.moveDamper(delta, DIRECTION_OPEN);
+                            setDamperPosition(newPos);
+                            setInBurnLoop(true);
+                            markAdjustment(1, now);
+                            setStatus("Below target - opening damper");
+                        } else if (delta > 0) {
+                            setStatus("Holding to avoid oscillation");
+                        }
+                    } else if (!inBurnLoop) {
+                        // Inside the band: do nothing (this is the magic that stops flapping)
+                        if (fireout) {
+                            setStatus("Fire is out, damper is closed to preserve coals");
+                        } else {
+                            setStatus("not in burn loop");
+                        }
                     } else {
-                        setStatus("not in burn loop");
+                        // Inside the band: do nothing (this is the magic that stops flapping)
+                        setStatus("Holding steady near target");
                     }
-                } else {
-                    // Inside the band: do nothing (this is the magic that stops flapping)
-                    setStatus("Holding steady near target");
+
+
+                    lastTemp = raw;
+                    lastTs = now;
+                    long sleepMs = dTdt > 0 ? 30_000 : 120_000;
+                    sleepQuietly(sleepMs);
+                } catch (Exception e) {
+                    logger.error("Control loop error; continuing after delay", e);
+                    lastTemp = temperature.getTemp();
+                    lastTs = System.currentTimeMillis();
+                    sleepQuietly(30_000);
                 }
-
-
-                lastTemp = raw;
-                lastTs = now;
-                long sleepMs = dTdt > 0 ? 30_000 : 120_000;
-                sleepQuietly(sleepMs);
             }
         });
 
