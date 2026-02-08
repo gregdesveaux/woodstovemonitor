@@ -52,7 +52,7 @@ public class MonitorStove {
     private static final int BAND_C = 3;
 
     // Keep some air while burning to avoid smolder/smoke (tune this for your stove)
-    private static final int MIN_BURN_OPEN = 1200;  // try 600–1200
+    private static final int MIN_BURN_OPEN = 900;  // try 600–1200
 
     // Safety: if truly too hot, you can go below MIN_BURN_OPEN
     private static final int OVERHEAT_C = 280;
@@ -220,7 +220,7 @@ public class MonitorStove {
 
     void openDamper() {
         int steps = 300;
-        if (damperPosition < DAMPER_FULLY_OPEN-steps) {
+        if (damperPosition < DAMPER_FULLY_OPEN - steps) {
             stepperMotor.moveDamper(steps, DIRECTION_OPEN);
             setDamperPosition(damperPosition + steps);
             logger.info("moving damper to: {}", damperPosition);
@@ -256,6 +256,9 @@ public class MonitorStove {
 
             while (true) {
                 int raw = temperature.getTemp();
+                if (raw == -273) {
+                    raw = lastTemp;
+                } // handle sensor read failure by treating as no change
                 long now = System.currentTimeMillis();
                 int roomTemp = temperature.getRoomTemp();
                 if (roomTemp > 50 && !fanOn) {

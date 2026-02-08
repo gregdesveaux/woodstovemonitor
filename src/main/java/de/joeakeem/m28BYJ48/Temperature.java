@@ -39,22 +39,22 @@ public class Temperature {
     }
 
     int getTemp() {
-        int objectTempRaw;
+        int objectTempRaw=0;
         try {
             objectTempRaw = readTemperatureRegisterWithTimeout(0x07);
             logger.debug("Sensor temp: {}", (int) Math.round(convertToCelsius(readTemperatureRegisterWithTimeout(0x06))));
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            logger.error("Error reading temperature sensor", e);
         }
         return (int) Math.round(convertToCelsius(objectTempRaw));
     }
 
     int getRoomTemp() {
-        int objectTempRaw;
+        int objectTempRaw=0;
         try {
             objectTempRaw = readTemperatureRegisterWithTimeout(0x06);
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            logger.error("Error reading room temperature sensor", e);
         }
         return (int) Math.round(convertToCelsius(objectTempRaw));
     }
