@@ -52,7 +52,7 @@ public class Temperature {
     int getRoomTemp() {
         int objectTempRaw;
         try {
-            objectTempRaw = readTemperatureRegister(i2c, 0x06);
+            objectTempRaw = readTemperatureRegisterWithTimeout(0x06);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
