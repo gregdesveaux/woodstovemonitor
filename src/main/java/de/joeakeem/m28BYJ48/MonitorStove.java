@@ -71,6 +71,8 @@ public class MonitorStove {
     private static final int NEAR_TARGET_ERROR_C = 10;
     private static final long ADJUSTMENT_COOLDOWN_MS = 120_000;
     private static final int REVERSAL_ERROR_C = 20;
+    private static final long ACTIVE_MONITOR_SLEEP_MS = 30_000;
+    private static final long PASSIVE_MONITOR_SLEEP_MS = 120_000;
 
     private int lastAdjustmentDirection = 0;
     private long lastAdjustmentTs = 0L;
@@ -282,6 +284,9 @@ public class MonitorStove {
                     double temp = tempFilter.update(raw);
                     double dTdt = slopeFilter.update(slope);
 
+                    // Target can still be adjustable from UI if you want:
+                    int target = highTemp; // set highTemp to 220 from UI, or just use TARGET_TEMP_C
+
                     // Decide whether we're “burning” (so MIN_BURN_OPEN applies)
                     // This is intentionally simple + stable.
                     boolean burningNow = inBurnLoop || temp >= 205;
@@ -322,7 +327,7 @@ public class MonitorStove {
                         }
                         lastTemp = raw;
                         lastTs = now;
-                        sleepQuietly(30_000);
+                        sleepQuietly(monitoringSleepMs(raw, target, dTdt));
                         continue;
                     }
                     // --- COAL PRESERVE OVERRIDE (fire is out) ---
@@ -353,8 +358,6 @@ public class MonitorStove {
                         lastTs = now;
                         continue;
                     }
-                    // Target can still be adjustable from UI if you want:
-                    int target = highTemp; // set highTemp to 220 from UI, or just use TARGET_TEMP_C
                     int low = target - BAND_C;
                     int high = target + BAND_C;
 
@@ -448,13 +451,12 @@ public class MonitorStove {
 
                     lastTemp = raw;
                     lastTs = now;
-                    long sleepMs = dTdt > 0 ? 30_000 : 120_000;
-                    sleepQuietly(sleepMs);
+                    sleepQuietly(monitoringSleepMs(raw, target, dTdt));
                 } catch (Exception e) {
                     logger.error("Control loop error; continuing after delay", e);
                     lastTemp = temperature.getTemp();
                     lastTs = System.currentTimeMillis();
-                    sleepQuietly(30_000);
+                    sleepQuietly(ACTIVE_MONITOR_SLEEP_MS);
                 }
             }
         });
@@ -495,6 +497,15 @@ public class MonitorStove {
     private void markAdjustment(int direction, long now) {
         lastAdjustmentDirection = direction;
         lastAdjustmentTs = now;
+    }
+
+    private static long monitoringSleepMs(int raw, int target, double slopeCPerMin) {
+        long sleepMs = slopeCPerMin > 0 ? ACTIVE_MONITOR_SLEEP_MS : PASSIVE_MONITOR_SLEEP_MS;
+        int dangerThreshold = Math.max(NOT_IN_BURN_LOOP_OPEN_THRESHOLD, target - APPROACH_HIGH_C);
+        if (raw >= dangerThreshold) {
+            return Math.min(sleepMs, ACTIVE_MONITOR_SLEEP_MS);
+        }
+        return sleepMs;
     }
 
     private static void sleepQuietly(long ms) {
