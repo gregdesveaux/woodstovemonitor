@@ -52,7 +52,10 @@ public class MonitorStove {
     private static final int BAND_C = 3;
 
     // Keep some air while burning to avoid smolder/smoke (tune this for your stove)
-    private static final int MIN_BURN_OPEN = 450;  // try 600–1200
+    private static final int MIN_BURN_OPEN = 750;
+    private static final int RECOVERY_MIN_BURN_OPEN = 1050;
+    private static final double RECOVERY_COOLING_SLOPE_C_PER_MIN = -2.5;
+    private static final int RECOVERY_ABOVE_TARGET_C = 6;
 
     // Safety: if truly too hot, you can go below MIN_BURN_OPEN
     private static final int OVERHEAT_C = 280;
@@ -382,7 +385,22 @@ public class MonitorStove {
                             && temp <= (target + APPROACH_HIGH_C)
                             && temp >= low;
 
-                    if (temp > high) {
+                    boolean coolingTooFastNearPeak = inBurnLoop
+                            && damperPosition <= MIN_BURN_OPEN
+                            && temp >= target + RECOVERY_ABOVE_TARGET_C
+                            && dTdt <= RECOVERY_COOLING_SLOPE_C_PER_MIN;
+
+                    if (coolingTooFastNearPeak) {
+                        int newPos = Math.min(DAMPER_FULLY_OPEN, Math.max(damperPosition, RECOVERY_MIN_BURN_OPEN));
+                        int delta = newPos - damperPosition;
+                        if (delta > 0 && canAdjust(1, (int) Math.round(temp) - target, now)) {
+                            stepperMotor.moveDamper(delta, DIRECTION_OPEN);
+                            setDamperPosition(newPos);
+                            setInBurnLoop(true);
+                            markAdjustment(1, now);
+                            setStatus("Cooling too fast above target - opening damper to protect flame");
+                        }
+                    } else if (temp > high) {
 
                         // Too hot -> close proportionally
                         int steps = computeStepsClose(error);
