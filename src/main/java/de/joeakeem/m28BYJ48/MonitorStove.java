@@ -23,7 +23,7 @@ import java.util.Date;
  */
 public class MonitorStove {
     private static final Logger logger = LoggerFactory.getLogger(MonitorStove.class);
-    private static final int DAMPER_FULLY_OPEN = 6000;
+    private static  int DAMPER_FULLY_OPEN = 6000;
     private static final int DIRECTION_CLOSE = 1;
     private static final int DIRECTION_OPEN = 0;
     private static final int START_HIGH_TEMP = 240;
@@ -52,7 +52,7 @@ public class MonitorStove {
     private static final int BAND_C = 3;
 
     // Keep some air while burning to avoid smolder/smoke (tune this for your stove)
-    private static final int MIN_BURN_OPEN = 900;  // try 600–1200
+    private static final int MIN_BURN_OPEN = 450;  // try 600–1200
 
     // Safety: if truly too hot, you can go below MIN_BURN_OPEN
     private static final int OVERHEAT_C = 280;
@@ -77,7 +77,7 @@ public class MonitorStove {
     private int lastAdjustmentDirection = 0;
     private long lastAdjustmentTs = 0L;
     private boolean overheatRecoveryNeeded = false;
-
+    long watchdogTime = 0;
 
     public static void main(String[] args) {
 
@@ -123,7 +123,7 @@ public class MonitorStove {
         //stepperMotor.performDemo(rotations);
         temperature = new Temperature();
         new WebInterface(this);
-
+        watchdog();
         temp = temperature.getTemp();
         status = inBurnLoop ? "IN BURN LOOP" : "NOT IN BURN LOOP";
 
@@ -214,6 +214,7 @@ public class MonitorStove {
     void resetBurn() {
         setInBurnLoop(false);
         fireout = false;
+        DAMPER_FULLY_OPEN=6000; // open damper fully to start fire, then control loop will adjust as needed
         logger.info(
                 "Reset burn requested (damperPosition={}, inBurnLoop={}, temp={})",
                 damperPosition,
@@ -264,6 +265,7 @@ public class MonitorStove {
 
             while (true) {
                 try {
+                    watchdogTime = System.currentTimeMillis();
                     int raw = temperature.getTemp();
                     if (raw == -273) {
                         raw = lastTemp;
@@ -307,7 +309,7 @@ public class MonitorStove {
                         continue;
                     }
                     if (overheatRecoveryNeeded && raw <= OVERHEAT_C - 20) {
-                        int targetPos = MIN_BURN_OPEN;
+                        int targetPos = 900;
                         int delta = targetPos - damperPosition;
                         if (delta > 0) {
                             stepperMotor.moveDamper(delta, DIRECTION_OPEN);
@@ -324,11 +326,12 @@ public class MonitorStove {
                             stepperMotor.moveDamper(Math.abs(delta), direction);
                             setDamperPosition(targetPos);
                             setStatus("Temp above 200 while not in burn loop - setting damper to 3000");
-                        }
+
                         lastTemp = raw;
                         lastTs = now;
+                            DAMPER_FULLY_OPEN=NOT_IN_BURN_LOOP_TARGET_POSITION; // once above 200 we only need between 0 and 3000, so treat 3000 as fully open for the rest of this burn
                         sleepQuietly(monitoringSleepMs(raw, target, dTdt));
-                        continue;
+                        continue;}
                     }
                     // --- COAL PRESERVE OVERRIDE (fire is out) ---
                     // If we're wide open and cooling and below 180C, close to preserve coals.
@@ -370,8 +373,8 @@ public class MonitorStove {
                     }
 
                     int error = (int) Math.round(temp) - target;
-                    logger.info("temp={} (raw={}), target={}, error={}, slope={:.2f}, high={}, low={}, inBurnLoop={}",
-                            Math.round(temp), raw, target, error, dTdt, high, low, inBurnLoop);
+                    logger.info("temp={} (raw={}), target={}, error={}, slope={}, high={}, low={}, inBurnLoop={}, damper={}",
+                            Math.round(temp), raw, target, error, dTdt, high, low, inBurnLoop,damperPosition);
                     boolean risingTowardHigh = dTdt >= APPROACH_SLOPE_C_PER_MIN
                             && temp >= (target - APPROACH_HIGH_C)
                             && temp <= high;
@@ -393,6 +396,8 @@ public class MonitorStove {
                             setStatus("Above target - closing damper");
                         } else if (delta > 0) {
                             setStatus("Holding to avoid oscillation");
+                        } else{
+                            logger.info("not moving damper delta{} ",delta);
                         }
                     } else if (risingTowardHigh) {
                         int approachError = (int) Math.round(temp) - (target - APPROACH_HIGH_C);
@@ -514,6 +519,45 @@ public class MonitorStove {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    public void watchdog() {
+        Thread t = new Thread(() -> {
+            while (true) {
+                try {
+                    Thread.sleep(60_000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                long now = System.currentTimeMillis();
+                if (now - watchdogTime > 240_000) {
+                    logger.error("Watchdog detected stall");
+                    logger.error("stack dump ************************************\n");
+                    logger.error(dumpStacksSimple());
+                    logger.error("end stack dump ************************************\n");
+
+                }
+            }
+        });
+        logger.info("Starting watchdog thread");
+        t.setName("Watchdog");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    public String dumpStacksSimple() {
+        StringBuilder sb = new StringBuilder();
+        for (var e : Thread.getAllStackTraces().entrySet()) {
+            Thread t = e.getKey();
+            sb.append('"').append(t.getName()).append("\" ")
+                    .append("Id=").append(t.getId()).append(" ")
+                    .append(t.getState()).append('\n');
+            for (StackTraceElement ste : e.getValue()) {
+                sb.append("    at ").append(ste).append('\n');
+            }
+            sb.append('\n');
+        }
+        return sb.toString();
     }
 
     private static final class Ewma {
