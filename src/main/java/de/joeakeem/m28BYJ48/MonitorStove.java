@@ -52,7 +52,7 @@ public class MonitorStove {
     private static final int BAND_C = 3;
 
     // Keep some air while burning to avoid smolder/smoke (tune this for your stove)
-    private static final int MIN_BURN_OPEN = 750;
+    private static final int MIN_BURN_OPEN = 450;
     private static final int RECOVERY_MIN_BURN_OPEN = 1050;
     private static final double RECOVERY_COOLING_SLOPE_C_PER_MIN = -2.5;
     private static final int RECOVERY_ABOVE_TARGET_C = 6;
