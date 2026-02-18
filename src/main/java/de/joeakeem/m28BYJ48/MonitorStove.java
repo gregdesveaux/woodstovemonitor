@@ -44,6 +44,7 @@ public class MonitorStove {
     private int temp = 0;
     private int highTemp = START_HIGH_TEMP;
     private boolean inBurnLoop = false;
+    private boolean mapControlActive = false;
     private boolean fanOn = false;
     private String status = "Monitoring";
     private boolean fireout = true;
@@ -217,6 +218,7 @@ public class MonitorStove {
     void resetBurn() {
         setInBurnLoop(false);
         fireout = false;
+        mapControlActive = false;
         DAMPER_FULLY_OPEN=6000; // open damper fully to start fire, then control loop will adjust as needed
         logger.info(
                 "Reset burn requested (damperPosition={}, inBurnLoop={}, temp={})",
@@ -321,6 +323,27 @@ public class MonitorStove {
                         }
                         overheatRecoveryNeeded = false;
                     }
+
+                    if (!mapControlActive && raw > NOT_IN_BURN_LOOP_OPEN_THRESHOLD) {
+                        mapControlActive = true;
+                        logger.info("Temperature map control activated at raw temp {}", raw);
+                    }
+
+                    if (mapControlActive) {
+                        int targetPos = damperPositionForTemperature(raw);
+                        int delta = targetPos - damperPosition;
+                        if (delta != 0) {
+                            int direction = delta > 0 ? DIRECTION_OPEN : DIRECTION_CLOSE;
+                            stepperMotor.moveDamper(Math.abs(delta), direction);
+                            setDamperPosition(targetPos);
+                            setStatus("Temperature-map control active");
+                        }
+                        lastTemp = raw;
+                        lastTs = now;
+                        sleepQuietly(monitoringSleepMs(raw, target, dTdt));
+                        continue;
+                    }
+
                     if (!inBurnLoop && raw > NOT_IN_BURN_LOOP_OPEN_THRESHOLD) {
                         int targetPos = NOT_IN_BURN_LOOP_TARGET_POSITION;
                         int delta = targetPos - damperPosition;
@@ -529,6 +552,40 @@ public class MonitorStove {
             return Math.min(sleepMs, ACTIVE_MONITOR_SLEEP_MS);
         }
         return sleepMs;
+    }
+
+    private static int damperPositionForTemperature(int temperatureC) {
+        if (temperatureC >= 280) {
+            return 0;
+        }
+        if (temperatureC >= 270) {
+            return 300;
+        }
+        if (temperatureC >= 260) {
+            return 600;
+        }
+        if (temperatureC >= 250) {
+            return 900;
+        }
+        if (temperatureC >= 240) {
+            return 1000;
+        }
+        if (temperatureC >= 230) {
+            return 1200;
+        }
+        if (temperatureC >= 220) {
+            return 1500;
+        }
+        if (temperatureC >= 210) {
+            return 2000;
+        }
+        if (temperatureC >= 150) {
+            return 3000;
+        }
+        if (temperatureC >= 140) {
+            return 0;
+        }
+        return 0;
     }
 
     private static void sleepQuietly(long ms) {
