@@ -34,7 +34,7 @@ public class MonitorStove {
 
     private final Temperature temperature;
     private final StepperMotor28BYJ48 stepperMotor;
-    private final FileOutputStream tempFile;
+    private  FileOutputStream tempFile=null;
     private final Memo memo;
 
     private record DamperState(int position, boolean inBurnLoop) {
@@ -96,7 +96,7 @@ public class MonitorStove {
         try {
             tempFile = new FileOutputStream(f, true);
         } catch (FileNotFoundException e) {
-            throw new RuntimeException(e);
+            e.printStackTrace();
         }
         Context pi4j = Pi4J.newAutoContext();
         stepperMotor = new StepperMotor28BYJ48(pi4j);
@@ -169,6 +169,13 @@ public class MonitorStove {
 
     private void setDamperPosition(int position) {
         damperPosition = clampDamperPosition(position);
+        try {
+            String csvLine = new Date() + "," + temperature.getTemp() + "," + damperPosition + System.lineSeparator();
+            tempFile.write(csvLine.getBytes(StandardCharsets.UTF_8));
+            tempFile.flush();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
         persistDamperState();
     }
 
@@ -299,30 +306,7 @@ public class MonitorStove {
                     boolean burningNow = inBurnLoop || temp >= 205;
 
                     // --- SAFETY OVERRIDE (too hot) ---
-                    if (raw >= OVERHEAT_C) {
-                        int steps = damperPosition; // close hard, but bounded
-                        if (steps > 0) {
-                            stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
-                            setDamperPosition(damperPosition - steps);
-                            setStatus("OVERHEAT - closing damper");
-                        }
-                        setInBurnLoop(true);
-                        overheatRecoveryNeeded = true;
-                        sleepQuietly(130_000);
-                        lastTemp = raw;
-                        lastTs = now;
-                        continue;
-                    }
-                    if (overheatRecoveryNeeded && raw <= OVERHEAT_C - 20) {
-                        int targetPos = 900;
-                        int delta = targetPos - damperPosition;
-                        if (delta > 0) {
-                            stepperMotor.moveDamper(delta, DIRECTION_OPEN);
-                            setDamperPosition(damperPosition + delta);
-                            setStatus("Recovered from overheat - opening damper to minimum burn");
-                        }
-                        overheatRecoveryNeeded = false;
-                    }
+
 
                     if (!mapControlActive && raw > NOT_IN_BURN_LOOP_OPEN_THRESHOLD) {
                         mapControlActive = true;
@@ -336,7 +320,7 @@ public class MonitorStove {
                             int direction = delta > 0 ? DIRECTION_OPEN : DIRECTION_CLOSE;
                             stepperMotor.moveDamper(Math.abs(delta), direction);
                             setDamperPosition(targetPos);
-                            setStatus("Temperature-map control active");
+                            setStatus("Temperature-map control active temp: "+ raw);
                         }
                         lastTemp = raw;
                         lastTs = now;
@@ -365,7 +349,7 @@ public class MonitorStove {
                             && raw <= FIRE_OUT_TEMP_C
                             && dTdt <= COOLING_SLOPE_C_PER_MIN
                             && inBurnLoop) {
-
+                        mapControlActive = false;
                         int targetPos = COAL_PRESERVE_POSITION;
 
                         // Close in chunks so you don't hammer the mechanism.
@@ -413,86 +397,7 @@ public class MonitorStove {
                             && temp >= target + RECOVERY_ABOVE_TARGET_C
                             && dTdt <= RECOVERY_COOLING_SLOPE_C_PER_MIN;
 
-                    if (coolingTooFastNearPeak) {
-                        int newPos = Math.min(DAMPER_FULLY_OPEN, Math.max(damperPosition, RECOVERY_MIN_BURN_OPEN));
-                        int delta = newPos - damperPosition;
-                        if (delta > 0 && canAdjust(1, (int) Math.round(temp) - target, now)) {
-                            stepperMotor.moveDamper(delta, DIRECTION_OPEN);
-                            setDamperPosition(newPos);
-                            setInBurnLoop(true);
-                            markAdjustment(1, now);
-                            setStatus("Cooling too fast above target - opening damper to protect flame");
-                        }
-                    } else if (temp > high) {
 
-                        // Too hot -> close proportionally
-                        int steps = computeStepsClose(error);
-                        int newPos = Math.max(minOpen, damperPosition - steps);
-                        int delta = damperPosition - newPos;
-                        if (delta > 0 && canAdjust(-1, error, now)) {
-                            stepperMotor.moveDamper(delta, DIRECTION_CLOSE);
-                            setDamperPosition(newPos);
-                            setInBurnLoop(true);
-                            markAdjustment(-1, now);
-                            setStatus("Above target - closing damper");
-                        } else if (delta > 0) {
-                            setStatus("Holding to avoid oscillation");
-                        } else{
-                            logger.info("not moving damper delta{} ",delta);
-                        }
-                    } else if (risingTowardHigh) {
-                        int approachError = (int) Math.round(temp) - (target - APPROACH_HIGH_C);
-                        int steps = computeStepsClose(Math.max(0, approachError));
-                        int newPos = Math.max(minOpen, damperPosition - steps);
-                        int delta = damperPosition - newPos;
-                        if (delta > 0 && canAdjust(-1, approachError, now)) {
-                            stepperMotor.moveDamper(delta, DIRECTION_CLOSE);
-                            setDamperPosition(newPos);
-                            setInBurnLoop(true);
-                            markAdjustment(-1, now);
-                            setStatus("Approaching target - closing damper");
-                        } else if (delta > 0) {
-                            setStatus("Holding to avoid oscillation");
-                        }
-                    } else if (fallingTowardHigh && inBurnLoop) {
-                        int approachError = (target + APPROACH_HIGH_C) - (int) Math.round(temp);
-                        int steps = computeStepsOpen(Math.max(0, approachError));
-                        int newPos = Math.min(DAMPER_FULLY_OPEN, damperPosition + steps);
-                        int delta = newPos - damperPosition;
-                        if (delta > 0 && canAdjust(1, approachError, now)) {
-                            stepperMotor.moveDamper(delta, DIRECTION_OPEN);
-                            setDamperPosition(newPos);
-                            setInBurnLoop(true);
-                            markAdjustment(1, now);
-                            setStatus("Cooling near target - opening damper");
-                        } else if (delta > 0) {
-                            setStatus("Holding to avoid oscillation");
-                        }
-                    } else if (temp < low && inBurnLoop) {
-                        // Too cool -> open proportionally (but don't exceed fully open)
-                        int steps = computeStepsOpen(-error);
-                        int newPos = Math.min(DAMPER_FULLY_OPEN, damperPosition + steps);
-                        int delta = newPos - damperPosition;
-                        if (delta > 0 && canAdjust(1, -error, now)) {
-                            stepperMotor.moveDamper(delta, DIRECTION_OPEN);
-                            setDamperPosition(newPos);
-                            setInBurnLoop(true);
-                            markAdjustment(1, now);
-                            setStatus("Below target - opening damper");
-                        } else if (delta > 0) {
-                            setStatus("Holding to avoid oscillation");
-                        }
-                    } else if (!inBurnLoop) {
-                        // Inside the band: do nothing (this is the magic that stops flapping)
-                        if (fireout) {
-                            setStatus("Fire is out, damper is closed to preserve coals");
-                        } else {
-                            setStatus("not in burn loop");
-                        }
-                    } else {
-                        // Inside the band: do nothing (this is the magic that stops flapping)
-                        setStatus("Holding steady near target");
-                    }
 
 
                     lastTemp = raw;
@@ -583,6 +488,9 @@ public class MonitorStove {
             return 3000;
         }
         if (temperatureC >= 140) {
+            return 3000;
+        }
+        if (temperatureC >= 130) {
             return 0;
         }
         return 0;
