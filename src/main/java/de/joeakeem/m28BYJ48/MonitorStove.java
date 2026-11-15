@@ -40,50 +40,26 @@ public class MonitorStove {
     private  FileOutputStream tempFile=null;
     private final Memo memo;
 
-    private record DamperState(int position, boolean inBurnLoop) {
+    private record DamperState(int position, boolean mapControlActive) {
     }
 
     private int damperPosition = DAMPER_FULLY_OPEN;
     private int temp = 0;
     private int highTemp = START_HIGH_TEMP;
-    private boolean inBurnLoop = false;
     private boolean mapControlActive = false;
     private boolean fanOn = false;
     private String status = "Monitoring";
-    private boolean fireout = true;
 
-    // Hysteresis band: no movement while inside [TARGET - BAND, TARGET + BAND]
-    private static final int BAND_C = 3;
-
-    // Keep some air while burning to avoid smolder/smoke (tune this for your stove)
-    private static final int MIN_BURN_OPEN = 450;
-    private static final int RECOVERY_MIN_BURN_OPEN = 1050;
-    private static final double RECOVERY_COOLING_SLOPE_C_PER_MIN = -2.5;
-    private static final int RECOVERY_ABOVE_TARGET_C = 6;
-
-    // Safety: if truly too hot, you can go below MIN_BURN_OPEN
-    private static final int OVERHEAT_C = 280;
+    private static final int DAMPER_MOVE_DEADBAND = 100;
     private static final int APPROACH_HIGH_C = 20;
-    private static final double APPROACH_SLOPE_C_PER_MIN = 0.15;
     private static final int FIRE_OUT_TEMP_C = 140;
     private static final int FIRE_OUT_OPEN_THRESHOLD = 3000;
-    private static final int NOT_IN_BURN_LOOP_OPEN_THRESHOLD = 200;
-    private static final int NOT_IN_BURN_LOOP_TARGET_POSITION = 3000;
+    private static final int MAP_CONTROL_ACTIVATION_TEMP_C = 200;
     private static final double COOLING_SLOPE_C_PER_MIN = -0.3; // tune: -0.2 to -1.0
     private static final int COAL_PRESERVE_POSITION = 0;        // or 200–400 if you want a tiny crack
-    private static final int MIN_STEP = 300;
-    private static final int MAX_STEP = 600;
-    private static final int MIN_STEP_NEAR = 150;
-    private static final int MAX_STEP_NEAR = 450;
-    private static final int NEAR_TARGET_ERROR_C = 10;
-    private static final long ADJUSTMENT_COOLDOWN_MS = 120_000;
-    private static final int REVERSAL_ERROR_C = 20;
     private static final long ACTIVE_MONITOR_SLEEP_MS = 90_000;
     private static final long PASSIVE_MONITOR_SLEEP_MS = 120_000;
 
-    private int lastAdjustmentDirection = 0;
-    private long lastAdjustmentTs = 0L;
-    private boolean overheatRecoveryNeeded = false;
     long watchdogTime = 0;
 
     public static void main(String[] args) {
@@ -143,14 +119,14 @@ public class MonitorStove {
         });
         DamperState damperState = loadDamperState();
         damperPosition = damperState.position();
-        inBurnLoop = damperState.inBurnLoop();
+        mapControlActive = damperState.mapControlActive();
         persistDamperState();
         //stepperMotor.performDemo(rotations);
         temperature = new Temperature();
         new WebInterface(this);
         watchdog();
         temp = temperature.getTemp();
-        status = inBurnLoop ? "IN BURN LOOP" : "NOT IN BURN LOOP";
+        status = mapControlActive ? "MAP CONTROL ACTIVE" : "MAP CONTROL INACTIVE";
 
         //logger.info("Moving damper to open");
         //stepperMotor.moveDamper(damperPosition, DIRECTION_OPEN);
@@ -200,10 +176,9 @@ public class MonitorStove {
         persistDamperState();
     }
 
-    private void setInBurnLoop(boolean inBurnLoop) {
-        this.inBurnLoop = inBurnLoop;
+    private void setMapControlActive(boolean mapControlActive) {
+        this.mapControlActive = mapControlActive;
         persistDamperState();
-
     }
 
     private int clampDamperPosition(int position) {
@@ -214,7 +189,7 @@ public class MonitorStove {
         try {
             Files.writeString(
                     DAMPER_POSITION_FILE,
-                    damperPosition + System.lineSeparator() + inBurnLoop,
+                    damperPosition + System.lineSeparator() + mapControlActive,
                     StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE,
                     StandardOpenOption.TRUNCATE_EXISTING
@@ -235,8 +210,8 @@ public class MonitorStove {
                 return new DamperState(DAMPER_FULLY_OPEN, false);
             }
             int position = clampDamperPosition(Integer.parseInt(lines.get(0).trim()));
-            boolean storedInBurnLoop = lines.size() > 1 && Boolean.parseBoolean(lines.get(1).trim());
-            return new DamperState(position, storedInBurnLoop);
+            boolean storedMapControlActive = lines.size() > 1 && Boolean.parseBoolean(lines.get(1).trim());
+            return new DamperState(position, storedMapControlActive);
         } catch (IOException | NumberFormatException e) {
             logger.error("Failed to read damper state from file, using default", e);
             return new DamperState(DAMPER_FULLY_OPEN, false);
@@ -244,20 +219,18 @@ public class MonitorStove {
     }
 
     void resetBurn() {
-        setInBurnLoop(false);
-        fireout = false;
-        mapControlActive = false;
+        setMapControlActive(false);
         DAMPER_FULLY_OPEN=6000; // open damper fully to start fire, then control loop will adjust as needed
         logger.info(
-                "Reset burn requested (damperPosition={}, inBurnLoop={}, temp={})",
+                "Reset burn requested (damperPosition={}, mapControlActive={}, temp={})",
                 damperPosition,
-                inBurnLoop,
+                mapControlActive,
                 temperature.getTemp()
         );
         logger.info("Moving damper to open");
         stepperMotor.moveDamper(DAMPER_FULLY_OPEN - damperPosition, DIRECTION_OPEN);
         setDamperPosition(DAMPER_FULLY_OPEN);
-        setStatus("Burn reset - NOT IN BURN LOOP");
+        setStatus("Burn reset - MAP CONTROL INACTIVE");
     }
 
     void openDamper() {
@@ -290,9 +263,6 @@ public class MonitorStove {
 
     void controlThread() {
         Thread t = new Thread(() -> {
-            Ewma tempFilter = new Ewma(0.25);     // tune 0.15–0.35
-            Ewma slopeFilter = new Ewma(0.30);
-
             int lastTemp = temperature.getTemp();
             long lastTs = System.currentTimeMillis();
 
@@ -316,114 +286,51 @@ public class MonitorStove {
                     double dtMin = Math.max(0.25, (now - lastTs) / 60000.0); // minutes
                     double slope = (raw - lastTemp) / dtMin;                // °C per minute
 
-                    double temp = tempFilter.update(raw);
-                    double dTdt = slopeFilter.update(slope);
+                    int target = highTemp;
 
-                    // Target can still be adjustable from UI if you want:
-                    int target = highTemp; // set highTemp to 220 from UI, or just use TARGET_TEMP_C
-
-                    // Decide whether we're “burning” (so MIN_BURN_OPEN applies)
-                    // This is intentionally simple + stable.
-                    boolean burningNow = inBurnLoop || temp >= 205;
-
-                    // --- SAFETY OVERRIDE (too hot) ---
-
-
-                    if (!mapControlActive && raw > NOT_IN_BURN_LOOP_OPEN_THRESHOLD) {
-                        mapControlActive = true;
+                    if (!mapControlActive && raw > MAP_CONTROL_ACTIVATION_TEMP_C) {
+                        setMapControlActive(true);
                         logger.info("Temperature map control activated at raw temp {}", raw);
                     }
 
                     if (mapControlActive) {
                         int targetPos = damperPositionForTemperature(raw);
                         int delta = targetPos - damperPosition;
-                        if (delta != 0) {
+                        if (Math.abs(delta) > DAMPER_MOVE_DEADBAND) {
                             int direction = delta > 0 ? DIRECTION_OPEN : DIRECTION_CLOSE;
                             stepperMotor.moveDamper(Math.abs(delta), direction);
                             setDamperPosition(targetPos);
-                            setStatus("Temperature-map control active temp: "+ raw);
+                            setStatus("Temperature-map control active temp: " + raw);
                         }
                         lastTemp = raw;
                         lastTs = now;
-                        sleepQuietly(monitoringSleepMs(raw, target, dTdt));
+                        sleepQuietly(monitoringSleepMs(raw, target, slope));
                         continue;
                     }
 
-                    if (!inBurnLoop && raw > NOT_IN_BURN_LOOP_OPEN_THRESHOLD) {
-                        int targetPos = NOT_IN_BURN_LOOP_TARGET_POSITION;
-                        int delta = targetPos - damperPosition;
-                        if (delta != 0) {
-                            int direction = delta > 0 ? DIRECTION_OPEN : DIRECTION_CLOSE;
-                            stepperMotor.moveDamper(Math.abs(delta), direction);
-                            setDamperPosition(targetPos);
-                            setStatus("Temp above 200 while not in burn loop - setting damper to 3000");
-
-                        lastTemp = raw;
-                        lastTs = now;
-                            DAMPER_FULLY_OPEN=NOT_IN_BURN_LOOP_TARGET_POSITION; // once above 200 we only need between 0 and 3000, so treat 3000 as fully open for the rest of this burn
-                        sleepQuietly(monitoringSleepMs(raw, target, dTdt));
-                        continue;}
-                    }
                     // --- COAL PRESERVE OVERRIDE (fire is out) ---
                     // If we're wide open and cooling and below 180C, close to preserve coals.
                     if (damperPosition > FIRE_OUT_OPEN_THRESHOLD
                             && raw <= FIRE_OUT_TEMP_C
-                            && dTdt <= COOLING_SLOPE_C_PER_MIN
-                            && inBurnLoop) {
-                        mapControlActive = false;
-                        int targetPos = COAL_PRESERVE_POSITION;
-
-                        // Close in chunks so you don't hammer the mechanism.
-                        int delta = damperPosition - targetPos;
-                        int steps = delta; // "close hard" but bounded per cycle
-
+                            && slope <= COOLING_SLOPE_C_PER_MIN) {
+                        int steps = damperPosition - COAL_PRESERVE_POSITION;
                         if (steps > 0) {
                             stepperMotor.moveDamper(steps, DIRECTION_CLOSE);
-                            setDamperPosition(damperPosition - steps);
+                            setDamperPosition(COAL_PRESERVE_POSITION);
                             setStatus("Fire out - closing damper to preserve coals");
                         }
-
-                        // This is not "burning" anymore.
-                        setInBurnLoop(false);
-                        fireout = true;
-
-                        sleepQuietly(120_000);
                         lastTemp = raw;
                         lastTs = now;
+                        setMapControlActive(false);
+                        sleepQuietly(PASSIVE_MONITOR_SLEEP_MS);
                         continue;
                     }
-                    int low = target - BAND_C;
-                    int high = target + BAND_C;
 
-                    int minOpen = burningNow ? MIN_BURN_OPEN : 0;
-
-                    // Predictive nudge: if rising fast, start closing a bit early
-                    // (prevents overshoot)
-                    if (dTdt > 3.0) { // >3°C/min is a “getting spicy” slope for many stoves
-                        high -= 2;
-                    }
-
-                    int error = (int) Math.round(temp) - target;
-                    logger.info("temp={} (raw={}), target={}, error={}, slope={}, high={}, low={}, inBurnLoop={}, damper={}",
-                            Math.round(temp), raw, target, error, dTdt, high, low, inBurnLoop,damperPosition);
-                    boolean risingTowardHigh = dTdt >= APPROACH_SLOPE_C_PER_MIN
-                            && temp >= (target - APPROACH_HIGH_C)
-                            && temp <= high;
-                    boolean fallingTowardHigh = dTdt <= -APPROACH_SLOPE_C_PER_MIN
-                            && temp <= (target + APPROACH_HIGH_C)
-                            && temp >= low;
-
-                    boolean coolingTooFastNearPeak = inBurnLoop
-                            && damperPosition <= MIN_BURN_OPEN
-                            && temp >= target + RECOVERY_ABOVE_TARGET_C
-                            && dTdt <= RECOVERY_COOLING_SLOPE_C_PER_MIN;
-
-
-
-
+                    logger.info("temp={}, target={}, slope={}, damper={}, waiting for >{}C",
+                            raw, target, slope, damperPosition, MAP_CONTROL_ACTIVATION_TEMP_C);
                     lastTemp = raw;
                     lastTs = now;
-                    sleepQuietly(monitoringSleepMs(raw, target, dTdt));
+                    sleepQuietly(monitoringSleepMs(raw, target, slope));
                 } catch (Exception e) {
                     logger.error("Control loop error; continuing after delay", e);
                     lastTemp = temperature.getTemp();
@@ -438,42 +345,9 @@ public class MonitorStove {
         t.start();
     }
 
-    private static int computeStepsClose(int errorC) {
-        // errorC is how many °C above target you are (positive)
-        int steps = (int) Math.round(errorC * 8.0);
-        return clampSteps(steps, errorC);
-    }
-
-    private static int computeStepsOpen(int belowC) {
-        // belowC is how many °C below target you are (positive)
-        int steps = (int) Math.round(belowC * 8.0);
-        return clampSteps(steps, belowC);
-    }
-
-    private static int clampSteps(int steps, int errorC) {
-        int minStep = errorC <= NEAR_TARGET_ERROR_C ? MIN_STEP_NEAR : MIN_STEP;
-        int maxStep = errorC <= NEAR_TARGET_ERROR_C ? MAX_STEP_NEAR : MAX_STEP;
-        return Math.max(minStep, Math.min(maxStep, steps));
-    }
-
-    private boolean canAdjust(int direction, int errorC, long now) {
-        if (lastAdjustmentDirection == 0 || lastAdjustmentDirection == direction) {
-            return true;
-        }
-        if (now - lastAdjustmentTs >= ADJUSTMENT_COOLDOWN_MS) {
-            return true;
-        }
-        return errorC >= REVERSAL_ERROR_C;
-    }
-
-    private void markAdjustment(int direction, long now) {
-        lastAdjustmentDirection = direction;
-        lastAdjustmentTs = now;
-    }
-
     private static long monitoringSleepMs(int raw, int target, double slopeCPerMin) {
         long sleepMs = slopeCPerMin > 0 ? ACTIVE_MONITOR_SLEEP_MS : PASSIVE_MONITOR_SLEEP_MS;
-        int dangerThreshold = Math.max(NOT_IN_BURN_LOOP_OPEN_THRESHOLD, target - APPROACH_HIGH_C);
+        int dangerThreshold = Math.max(MAP_CONTROL_ACTIVATION_TEMP_C, target - APPROACH_HIGH_C);
         if (raw >= dangerThreshold) {
             return Math.min(sleepMs, ACTIVE_MONITOR_SLEEP_MS);
         }
@@ -579,18 +453,6 @@ public class MonitorStove {
         return sb.toString();
     }
 
-    private static final class Ewma {
-        private final double alpha;
-        private Double v;
 
-        private Ewma(double alpha) {
-            this.alpha = alpha;
-        }
-
-        double update(double x) {
-            v = (v == null) ? x : (alpha * x + (1 - alpha) * v);
-            return v;
-        }
-    }
 
 }
