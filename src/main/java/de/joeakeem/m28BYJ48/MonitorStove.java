@@ -12,17 +12,20 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Date;
+import java.util.Properties;
 
 /**
  * Coordinates the wood stove monitor hardware and web interface.
  */
 public class MonitorStove {
     private static final Logger logger = LoggerFactory.getLogger(MonitorStove.class);
+    private static final String VERSION = loadVersion();
     private static  int DAMPER_FULLY_OPEN = 6000;
     private static final int DIRECTION_CLOSE = 1;
     private static final int DIRECTION_OPEN = 0;
@@ -75,7 +78,7 @@ public class MonitorStove {
     private static final int NEAR_TARGET_ERROR_C = 10;
     private static final long ADJUSTMENT_COOLDOWN_MS = 120_000;
     private static final int REVERSAL_ERROR_C = 20;
-    private static final long ACTIVE_MONITOR_SLEEP_MS = 30_000;
+    private static final long ACTIVE_MONITOR_SLEEP_MS = 90_000;
     private static final long PASSIVE_MONITOR_SLEEP_MS = 120_000;
 
     private int lastAdjustmentDirection = 0;
@@ -84,9 +87,27 @@ public class MonitorStove {
     long watchdogTime = 0;
 
     public static void main(String[] args) {
-
+        logger.info("Starting Wood Stove Monitor {}", VERSION);
         new MonitorStove();
 
+    }
+
+    private static String loadVersion() {
+        Properties props = new Properties();
+        try (InputStream in = MonitorStove.class.getResourceAsStream("/version.properties")) {
+            if (in != null) {
+                props.load(in);
+            }
+        } catch (IOException e) {
+            return "unknown";
+        }
+        String version = props.getProperty("version", "unknown");
+        String buildNumber = props.getProperty("build.number", "unknown");
+        String buildTime = props.getProperty("build.time", "unknown");
+        if (version.contains("${") || buildNumber.contains("${")) {
+            return "dev";
+        }
+        return version + " build " + buildNumber + " (" + buildTime + ")";
     }
 
     public MonitorStove() {
@@ -483,6 +504,21 @@ public class MonitorStove {
         }
         if (temperatureC >= 210) {
             return 2000;
+        }
+        if (temperatureC >= 200) {
+            return 2100;
+        }
+        if (temperatureC >= 190) {
+            return 2200;
+        }
+        if (temperatureC >= 180) {
+            return 2400;
+        }
+        if (temperatureC >= 170) {
+            return 2600;
+        }
+        if (temperatureC >= 160) {
+            return 2800;
         }
         if (temperatureC >= 150) {
             return 3000;
